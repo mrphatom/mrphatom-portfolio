@@ -16,6 +16,8 @@ export interface Profile {
   email: string;
   resumeUrl: string;
   socialLinks: SocialLink[];
+  headingLine1?: string; // e.g. "Creative"
+  headingLine2?: string; // e.g. "Developer"
 }
 
 export interface Project {

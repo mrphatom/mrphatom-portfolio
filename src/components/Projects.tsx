@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ExternalLink, Code, FolderOpen, X, ArrowUpRight } from 'lucide-react';
 import { Project } from '../types';
 import ProjectMockup from './ProjectMockup';
+import Tilt from './Tilt';
 
 interface ProjectsProps {
   projects: Project[];
@@ -78,90 +79,92 @@ export default function Projects({ projects }: ProjectsProps) {
                 viewport={{ once: true, margin: "-100px" }}
                 exit={{ opacity: 0, scale: 0.96 }}
                 transition={{ duration: 0.45, ease: 'easeOut' }}
-                className="group relative flex flex-col bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200/80 dark:border-zinc-805 overflow-hidden transition-all hover:shadow-md hover:border-zinc-350 dark:hover:border-zinc-700"
+                className="h-full"
               >
-                {/* Simulated Custom Live Mockup Panel (Aesthetic Header) */}
-                <div className="relative aspect-video w-full p-4 bg-zinc-100 dark:bg-zinc-950/80 border-b border-zinc-200/50 dark:border-zinc-850/50 flex items-center justify-center overflow-hidden">
-                  <div className="w-full h-full transform group-hover:scale-102 transition-transform duration-500">
-                    <ProjectMockup type={project.image} />
-                  </div>
-
-                  {/* Quick-Inspect Hover Pill overlay */}
-                  <div className="absolute inset-0 bg-zinc-950/20 dark:bg-zinc-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px]">
-                    <button
-                      onClick={() => setActiveProject(project)}
-                      className="px-4 py-2 rounded-lg bg-white/95 dark:bg-zinc-900/95 text-xs font-medium text-zinc-900 dark:text-zinc-55 flex items-center gap-1.5 cursor-pointer shadow-sm select-none"
-                    >
-                      <FolderOpen size={13} />
-                      Detail Specs
-                    </button>
-                  </div>
-                </div>
-
-                {/* Card description text details */}
-                <div className="p-6 flex-1 flex flex-col justify-between">
-                  <div>
-                    <div className="flex justify-between items-start mb-2 gap-2">
-                      <h4 className="text-lg font-display font-semibold transition-colors text-zinc-900 dark:text-zinc-50 group-hover:text-blue-500 dark:group-hover:text-blue-400">
-                        {project.title}
-                      </h4>
-                      <span className="text-[10px] font-mono uppercase bg-zinc-200/60 dark:bg-zinc-800 text-zinc-650 dark:text-zinc-450 px-2 py-0.5 rounded">
-                        {project.role}
-                      </span>
-                    </div>
-                    <p className="text-sm font-light text-zinc-550 dark:text-zinc-400 leading-relaxed line-clamp-2 mb-4">
-                      {project.description}
-                    </p>
-                  </div>
-
-                  {/* Tags and Live code specs footer */}
-                  <div className="flex flex-col gap-4 mt-auto pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
-                    <div className="flex flex-wrap gap-1.5">
-                      {project.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="text-[10px] font-mono text-zinc-505 dark:text-zinc-455 hover:text-blue-500 transition-colors cursor-pointer select-none"
-                        >
-                          #{tag.toLowerCase().replace(/\s+/g, '')}
-                        </span>
-                      ))}
+                <Tilt className="group relative flex flex-col h-full bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200/80 dark:border-zinc-805 overflow-hidden transition-all hover:shadow-md hover:border-zinc-350 dark:hover:border-zinc-700">
+                  {/* Simulated Custom Live Mockup Panel (Aesthetic Header) */}
+                  <div className="relative aspect-video w-full p-4 bg-zinc-100 dark:bg-zinc-950/80 border-b border-zinc-200/50 dark:border-zinc-850/50 flex items-center justify-center overflow-hidden">
+                    <div className="w-full h-full transform group-hover:scale-102 transition-transform duration-500">
+                      <ProjectMockup type={project.image} />
                     </div>
 
-                    <div className="flex justify-between items-center text-xs">
+                    {/* Quick-Inspect Hover Pill overlay */}
+                    <div className="absolute inset-0 bg-zinc-950/20 dark:bg-zinc-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px]">
                       <button
                         onClick={() => setActiveProject(project)}
-                        className="text-zinc-800 hover:text-blue-500 dark:text-zinc-200 dark:hover:text-blue-400 transition-colors font-medium cursor-pointer flex items-center gap-1"
+                        className="px-4 py-2 rounded-lg bg-white/95 dark:bg-zinc-900/95 text-xs font-medium text-zinc-900 dark:text-zinc-55 flex items-center gap-1.5 cursor-pointer shadow-sm select-none"
                       >
-                        Read Specs
+                        <FolderOpen size={13} />
+                        Detail Specs
                       </button>
+                    </div>
+                  </div>
 
-                      <div className="flex gap-4">
-                        {project.codeUrl && (
-                          <a
-                            href={project.codeUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors cursor-pointer flex items-center gap-1"
-                            aria-label="GitHub Repository Link"
+                  {/* Card description text details */}
+                  <div className="p-6 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-2 gap-2">
+                        <h4 className="text-lg font-display font-semibold transition-colors text-zinc-900 dark:text-zinc-50 group-hover:text-blue-500 dark:group-hover:text-blue-400">
+                          {project.title}
+                        </h4>
+                        <span className="text-[10px] font-mono uppercase bg-zinc-200/60 dark:bg-zinc-800 text-zinc-650 dark:text-zinc-450 px-2 py-0.5 rounded">
+                          {project.role}
+                        </span>
+                      </div>
+                      <p className="text-sm font-light text-zinc-550 dark:text-zinc-400 leading-relaxed line-clamp-2 mb-4">
+                        {project.description}
+                      </p>
+                    </div>
+
+                    {/* Tags and Live code specs footer */}
+                    <div className="flex flex-col gap-4 mt-auto pt-4 border-t border-zinc-100 dark:border-zinc-800/60">
+                      <div className="flex flex-wrap gap-1.5">
+                        {project.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="text-[10px] font-mono text-zinc-505 dark:text-zinc-455 hover:text-blue-500 transition-colors cursor-pointer select-none"
                           >
-                            <Code size={14} /> Repository
-                          </a>
-                        )}
-                        {project.demoUrl && (
-                          <a
-                            href={project.demoUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors cursor-pointer flex items-center gap-1.5 font-medium group/link"
-                            aria-label="Live Demo Link"
-                          >
-                            Live App <ArrowUpRight size={14} className="group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform" />
-                          </a>
-                        )}
+                            #{tag.toLowerCase().replace(/\s+/g, '')}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex justify-between items-center text-xs">
+                        <button
+                          onClick={() => setActiveProject(project)}
+                          className="text-zinc-800 hover:text-blue-500 dark:text-zinc-200 dark:hover:text-blue-400 transition-colors font-medium cursor-pointer flex items-center gap-1"
+                        >
+                          Read Specs
+                        </button>
+
+                        <div className="flex gap-4">
+                          {project.codeUrl && (
+                            <a
+                              href={project.codeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors cursor-pointer flex items-center gap-1"
+                              aria-label="GitHub Repository Link"
+                            >
+                              <Code size={14} /> Repository
+                            </a>
+                          )}
+                          {project.demoUrl && (
+                            <a
+                              href={project.demoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors cursor-pointer flex items-center gap-1.5 font-medium group/link"
+                              aria-label="Live Demo Link"
+                            >
+                              Live App <ArrowUpRight size={14} className="group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform" />
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                </Tilt>
               </motion.div>
             ))}
           </AnimatePresence>

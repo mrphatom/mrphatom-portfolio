@@ -149,16 +149,21 @@ export default function Skills({ skills }: SkillsProps) {
 
               {/* Graphical level meter widget */}
               <div className="flex items-center gap-3 w-1/3">
-                <div className="relative h-1 w-full bg-zinc-105 dark:bg-zinc-800/80 rounded-full overflow-hidden">
+                <div className="relative h-1.5 w-full bg-zinc-100 dark:bg-zinc-800/80 rounded-full overflow-hidden">
                   <motion.div
                     className="absolute top-0 left-0 bottom-0 bg-zinc-900 dark:bg-zinc-50 rounded-full"
-                    initial={{ width: 0 }}
+                    initial={{ width: "0%" }}
                     whileInView={{ width: `${skill.level}%` }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 1, ease: 'easeOut', delay: 0.1 }}
+                    viewport={{ once: true, margin: "-20px" }}
+                    transition={{ 
+                      type: 'spring',
+                      stiffness: 70, 
+                      damping: 15,
+                      delay: 0.1
+                    }}
                   />
                 </div>
-                <span className="text-[10px] font-mono text-zinc-500 text-right min-w-[28px]">
+                <span className="text-[10px] font-mono text-zinc-500 font-medium text-right min-w-[28px] select-none">
                   {skill.level}%
                 </span>
               </div>

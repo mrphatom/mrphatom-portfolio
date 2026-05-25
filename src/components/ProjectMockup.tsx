@@ -313,7 +313,7 @@ export default function ProjectMockup({ type }: ProjectMockupProps) {
           >
             <MousePointer size={12} className="text-rose-400 fill-rose-400" />
             <div className="bg-rose-500 text-white text-[7px] font-semibold py-0.5 px-1 rounded ml-2.5 mt-2 shadow-md">
-              Kaelen (Dev)
+              Benson (Dev)
             </div>
           </motion.div>
         </div>

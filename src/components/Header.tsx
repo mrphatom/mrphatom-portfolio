@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sun, Moon, Menu, X } from 'lucide-react';
 import { Profile } from '../types';
+import { playSoftClick, playNavTick } from '../utils/audio';
 
 interface HeaderProps {
   profile: Profile;
@@ -49,6 +50,7 @@ export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSe
   ];
 
   const handleLinkClick = (id: string) => {
+    playNavTick();
     setActiveSection(id);
     setMobileMenuOpen(false);
     
@@ -63,9 +65,9 @@ export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSe
   return (
     <header
       id="header-nav"
-      className="lg:hidden fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-white/90 dark:bg-[#060606]/95 border-b border-zinc-200/50 dark:border-zinc-850/40 backdrop-blur-md py-4"
+      className="lg:hidden fixed top-3 left-3 right-3 sm:top-4 sm:left-5 sm:right-5 z-50 transition-all duration-300 bg-white/45 dark:bg-[#060606]/35 border border-zinc-200/40 dark:border-zinc-850/40 backdrop-blur-xl py-2.5 px-4 rounded-xl shadow-xs"
     >
-      <div className="max-w-6xl mx-auto px-6 flex justify-between items-center">
+      <div className="max-w-6xl mx-auto flex justify-between items-center">
         {/* Brand Logo */}
         <motion.a
           id="logo-link"
@@ -74,7 +76,8 @@ export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSe
             e.preventDefault();
             handleLinkClick('work');
           }}
-          className="font-display font-medium text-lg tracking-tight select-none flex items-center gap-1.5"
+          onMouseEnter={playSoftClick}
+          className="font-display font-medium text-base tracking-tight select-none flex items-center gap-1.5"
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
@@ -96,10 +99,11 @@ export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSe
                     e.preventDefault();
                     handleLinkClick(link.id);
                   }}
+                  onMouseEnter={playSoftClick}
                   className={`relative py-1 text-sm font-medium transition-colors ${
                     activeSection === link.id
                       ? 'text-zinc-900 dark:text-zinc-50'
-                      : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                      : 'text-zinc-550 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
                   }`}
                 >
                   {link.label}
@@ -121,12 +125,13 @@ export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSe
           <motion.button
             id="theme-toggle-btn"
             onClick={toggleDarkMode}
-            className="p-2 rounded-full border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
+            onMouseEnter={playSoftClick}
+            className="p-2 rounded-full border border-zinc-200/50 dark:border-zinc-800/50 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-colors cursor-pointer"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             aria-label="Toggle theme mode"
           >
-            {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+            {darkMode ? <Sun size={15} /> : <Moon size={15} />}
           </motion.button>
         </nav>
 
@@ -136,19 +141,21 @@ export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSe
           <button
             id="mobile-theme-toggle-btn"
             onClick={toggleDarkMode}
-            className="p-2 rounded-full border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
+            onMouseEnter={playSoftClick}
+            className="p-2 rounded-full border border-zinc-200/50 dark:border-zinc-800/50 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-colors cursor-pointer"
             aria-label="Toggle theme mode"
           >
-            {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+            {darkMode ? <Sun size={15} /> : <Moon size={15} />}
           </button>
 
           <button
             id="mobile-burger-btn"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="p-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
+            onMouseEnter={playSoftClick}
+            className="p-2 rounded-lg border border-zinc-200/50 dark:border-zinc-805 text-zinc-805 dark:text-zinc-100 hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-colors cursor-pointer"
             aria-label="Toggle mobile menu"
           >
-            {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+            {mobileMenuOpen ? <X size={16} /> : <Menu size={16} />}
           </button>
         </div>
       </div>
@@ -161,10 +168,10 @@ export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSe
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="md:hidden border-b border-zinc-200/50 dark:border-zinc-800/50 bg-zinc-50 dark:bg-zinc-950 backdrop-blur-md overflow-hidden"
+            className="md:hidden border-t border-zinc-200/20 dark:border-zinc-850/20 bg-white/20 dark:bg-black/10 backdrop-blur-xl overflow-hidden mt-2 pt-2.5 rounded-b-lg"
           >
-            <nav className="px-6 pt-2 pb-6 flex flex-col gap-4">
-              <ul className="flex flex-col gap-3">
+            <nav className="px-2 pb-3.5 flex flex-col gap-4">
+              <ul className="flex flex-col gap-2.5">
                 {navLinks.map((link) => (
                   <li key={link.href}>
                     <a
@@ -173,10 +180,11 @@ export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSe
                         e.preventDefault();
                         handleLinkClick(link.id);
                       }}
-                      className={`block py-2 text-base font-medium transition-colors ${
+                      onMouseEnter={playSoftClick}
+                      className={`block py-1.5 px-2 text-sm font-medium rounded-lg transition-colors ${
                         activeSection === link.id
-                          ? 'text-zinc-900 dark:text-zinc-50 pl-2 border-l-2 border-zinc-900 dark:border-zinc-50'
-                          : 'text-zinc-550 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                          ? 'text-zinc-900 dark:text-zinc-50 bg-zinc-100/40 dark:bg-white/[0.05] border-l-2 border-zinc-900 dark:border-zinc-50'
+                          : 'text-zinc-550 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100/20 dark:hover:bg-white/[0.02]'
                       }`}
                     >
                       {link.label}

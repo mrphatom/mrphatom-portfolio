@@ -24,11 +24,8 @@ export default function Footer({ profile }: FooterProps) {
         
         {/* Core copyright */}
         <div className="text-center md:text-left select-none">
-          <p className="text-xs text-zinc-500 font-mono">
+          <p className="text-xs text-zinc-550 font-mono">
             &copy; {currentYear} {profile.name} {profile.sirName}. Independent Web Engineer.
-          </p>
-          <p className="text-[10px] text-zinc-400 mt-1">
-            Recreated precisely based on Frontend Minimal Community template.
           </p>
         </div>
 

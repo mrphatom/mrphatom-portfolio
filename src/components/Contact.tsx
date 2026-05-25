@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent, MouseEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, MessageSquare, Send, CheckCircle2, Inbox, Trash2, Search, ExternalLink, ShieldCheck } from 'lucide-react';
+import { Mail, MessageSquare, Send, CheckCircle2, Inbox, Trash2, Search, ExternalLink, ShieldCheck, AlertCircle } from 'lucide-react';
 import { Profile } from '../types';
 
 interface ContactProps {
@@ -20,6 +20,7 @@ export default function Contact({ profile }: ContactProps) {
   // Form input states
   const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
   const [formErrors, setFormErrors] = useState({ name: '', email: '', subject: '', message: '' });
+  const [touched, setTouched] = useState({ name: false, email: false, subject: false, message: false });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
@@ -41,39 +42,61 @@ export default function Contact({ profile }: ContactProps) {
     }
   }, []);
 
-  // Validation checking
-  const validateForm = () => {
+  // Real-time validation checks
+  const runValidation = (data: typeof formData, activeTouched: typeof touched) => {
     const errors = { name: '', email: '', subject: '', message: '' };
-    let isValid = true;
 
-    if (!formData.name.trim()) {
+    if (activeTouched.name && !data.name.trim()) {
       errors.name = 'Please provide your name.';
-      isValid = false;
     }
 
-    if (!formData.email.trim()) {
-      errors.email = 'An email address is required.';
-      isValid = false;
-    } else if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$/i.test(formData.email)) {
-      errors.email = 'Please provide a valid email format.';
-      isValid = false;
+    if (activeTouched.email) {
+      if (!data.email.trim()) {
+        errors.email = 'An email address is required.';
+      } else if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$/i.test(data.email)) {
+        errors.email = 'Please provide a valid email format.';
+      }
     }
 
-    if (!formData.subject.trim()) {
+    if (activeTouched.subject && !data.subject.trim()) {
       errors.subject = 'Please supply a request subject line.';
-      isValid = false;
     }
 
-    if (!formData.message.trim()) {
-      errors.message = 'Please provide a short message note.';
-      isValid = false;
-    } else if (formData.message.trim().length < 10) {
-      errors.message = 'Message must be at least 10 characters.';
-      isValid = false;
+    if (activeTouched.message) {
+      if (!data.message.trim()) {
+        errors.message = 'Please provide your message note.';
+      } else if (data.message.trim().length < 10) {
+        errors.message = 'Message must be at least 10 characters.';
+      }
     }
 
+    return errors;
+  };
+
+  // Run validation whenever input metrics change
+  useEffect(() => {
+    const errors = runValidation(formData, touched);
     setFormErrors(errors);
-    return isValid;
+  }, [formData, touched]);
+
+  const handleInputChange = (field: 'name' | 'email' | 'subject' | 'message', value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
+  const handleInputBlur = (field: 'name' | 'email' | 'subject' | 'message') => {
+    setTouched(prev => ({ ...prev, [field]: true }));
+  };
+
+  // Validation checking for submission
+  const validateForm = () => {
+    const allTouched = { name: true, email: true, subject: true, message: true };
+    setTouched(allTouched);
+    
+    const errors = runValidation(formData, allTouched);
+    setFormErrors(errors);
+    
+    return !errors.name && !errors.email && !errors.subject && !errors.message;
   };
 
   // Form submit handler
@@ -126,6 +149,7 @@ export default function Contact({ profile }: ContactProps) {
         setIsSubmitting(false);
         setIsSuccess(true);
         setFormData({ name: '', email: '', subject: '', message: '' });
+        setTouched({ name: false, email: false, subject: false, message: false });
       } catch (err) {
         console.error("Local storage submission error", err);
         setIsSubmitting(false);
@@ -461,18 +485,34 @@ export default function Contact({ profile }: ContactProps) {
                             <label htmlFor="name" className="block text-[10px] font-mono uppercase text-zinc-500 mb-1.5 font-bold">
                               Your Name
                             </label>
-                            <input
-                              type="text"
-                              id="name"
-                              value={formData.name}
-                              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                              className={`w-full text-xs py-3 px-4 bg-zinc-50 dark:bg-zinc-950 border rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all dark:text-zinc-200 ${
-                                formErrors.name ? 'border-red-400' : 'border-zinc-200 dark:border-zinc-800'
-                              }`}
-                              placeholder="e.g. Alexis"
-                            />
+                            <div className="relative">
+                              <input
+                                type="text"
+                                id="name"
+                                value={formData.name}
+                                onChange={(e) => handleInputChange('name', e.target.value)}
+                                onBlur={() => handleInputBlur('name')}
+                                className={`w-full text-xs py-3 pl-4 pr-10 bg-zinc-50 dark:bg-zinc-950 border rounded-lg focus:ring-1 outline-none transition-all dark:text-zinc-200 ${
+                                  formErrors.name 
+                                    ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500 ring-1 ring-red-500/10' 
+                                    : touched.name && formData.name.trim() 
+                                      ? 'border-emerald-500 focus:ring-emerald-500/20 focus:border-emerald-500 ring-1 ring-emerald-500/10' 
+                                      : 'border-zinc-200 dark:border-zinc-800 focus:ring-blue-500/20 focus:border-blue-500'
+                                }`}
+                                placeholder="e.g. Alexis"
+                              />
+                              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none select-none">
+                                {formErrors.name ? (
+                                  <AlertCircle size={14} className="text-red-500" />
+                                ) : touched.name && formData.name.trim() ? (
+                                  <CheckCircle2 size={14} className="text-emerald-500 animate-pulse" />
+                                ) : null}
+                              </div>
+                            </div>
                             {formErrors.name && (
-                              <p className="text-[9px] text-red-500 font-mono mt-1">{formErrors.name}</p>
+                              <p className="text-[9px] text-red-505 font-mono mt-1 flex items-center gap-1">
+                                <AlertCircle size={10} /> {formErrors.name}
+                              </p>
                             )}
                           </div>
 
@@ -480,18 +520,34 @@ export default function Contact({ profile }: ContactProps) {
                             <label htmlFor="email" className="block text-[10px] font-mono uppercase text-zinc-500 mb-1.5 font-bold">
                               Email Address
                             </label>
-                            <input
-                              type="email"
-                              id="email"
-                              value={formData.email}
-                              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                              className={`w-full text-xs py-3 px-4 bg-zinc-50 dark:bg-zinc-950 border rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all dark:text-zinc-200 ${
-                                formErrors.email ? 'border-red-400' : 'border-zinc-200 dark:border-zinc-800'
-                              }`}
-                              placeholder="e.g. alexis@company.com"
-                            />
+                            <div className="relative">
+                              <input
+                                type="email"
+                                id="email"
+                                value={formData.email}
+                                onChange={(e) => handleInputChange('email', e.target.value)}
+                                onBlur={() => handleInputBlur('email')}
+                                className={`w-full text-xs py-3 pl-4 pr-10 bg-zinc-50 dark:bg-zinc-950 border rounded-lg focus:ring-1 outline-none transition-all dark:text-zinc-200 ${
+                                  formErrors.email 
+                                    ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500 ring-1 ring-red-500/10' 
+                                    : touched.email && formData.email.trim() 
+                                      ? 'border-emerald-500 focus:ring-emerald-500/20 focus:border-emerald-500 ring-1 ring-emerald-500/10' 
+                                      : 'border-zinc-200 dark:border-zinc-800 focus:ring-blue-500/20 focus:border-blue-500'
+                                }`}
+                                placeholder="e.g. alexis@company.com"
+                              />
+                              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none select-none">
+                                {formErrors.email ? (
+                                  <AlertCircle size={14} className="text-red-500" />
+                                ) : touched.email && formData.email.trim() ? (
+                                  <CheckCircle2 size={14} className="text-emerald-500 animate-pulse" />
+                                ) : null}
+                              </div>
+                            </div>
                             {formErrors.email && (
-                              <p className="text-[9px] text-red-500 font-mono mt-1">{formErrors.email}</p>
+                              <p className="text-[9px] text-red-550 font-mono mt-1 flex items-center gap-1">
+                                <AlertCircle size={10} /> {formErrors.email}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -501,18 +557,34 @@ export default function Contact({ profile }: ContactProps) {
                           <label htmlFor="subject" className="block text-[10px] font-mono uppercase text-zinc-500 mb-1.5 font-bold">
                             Subject Request
                           </label>
-                          <input
-                            type="text"
-                            id="subject"
-                            value={formData.subject}
-                            onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                            className={`w-full text-xs py-3 px-4 bg-zinc-50 dark:bg-zinc-950 border rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all dark:text-zinc-200 ${
-                              formErrors.subject ? 'border-red-400' : 'border-zinc-200 dark:border-zinc-800'
-                            }`}
-                            placeholder="e.g. Interface Contract Project"
-                          />
+                          <div className="relative">
+                            <input
+                              type="text"
+                              id="subject"
+                              value={formData.subject}
+                              onChange={(e) => handleInputChange('subject', e.target.value)}
+                              onBlur={() => handleInputBlur('subject')}
+                              className={`w-full text-xs py-3 pl-4 pr-10 bg-zinc-50 dark:bg-zinc-950 border rounded-lg focus:ring-1 outline-none transition-all dark:text-zinc-200 ${
+                                formErrors.subject 
+                                  ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500 ring-1 ring-red-500/10' 
+                                  : touched.subject && formData.subject.trim() 
+                                    ? 'border-emerald-500 focus:ring-emerald-500/20 focus:border-emerald-500 ring-1 ring-emerald-500/10' 
+                                    : 'border-zinc-200 dark:border-zinc-800 focus:ring-blue-500/20 focus:border-blue-500'
+                              }`}
+                              placeholder="e.g. Interface Contract Project"
+                            />
+                            <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none select-none">
+                              {formErrors.subject ? (
+                                <AlertCircle size={14} className="text-red-500" />
+                              ) : touched.subject && formData.subject.trim() ? (
+                                <CheckCircle2 size={14} className="text-emerald-500 animate-pulse" />
+                              ) : null}
+                            </div>
+                          </div>
                           {formErrors.subject && (
-                            <p className="text-[9px] text-red-500 font-mono mt-1">{formErrors.subject}</p>
+                            <p className="text-[9px] text-red-500 font-mono mt-1 flex items-center gap-1">
+                              <AlertCircle size={10} /> {formErrors.subject}
+                            </p>
                           )}
                         </div>
 
@@ -521,18 +593,34 @@ export default function Contact({ profile }: ContactProps) {
                           <label htmlFor="message" className="block text-[10px] font-mono uppercase text-zinc-500 mb-1.5 font-bold">
                             Message Detail
                           </label>
-                          <textarea
-                            id="message"
-                            rows={4}
-                            value={formData.message}
-                            onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                            className={`w-full text-xs py-3 px-4 bg-zinc-50 dark:bg-zinc-950 border rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all dark:text-zinc-200 ${
-                              formErrors.message ? 'border-red-400' : 'border-zinc-200 dark:border-zinc-800'
-                            }`}
-                            placeholder="Detail your requirements, technology choices, timeline, and goals..."
-                          />
+                          <div className="relative">
+                            <textarea
+                              id="message"
+                              rows={4}
+                              value={formData.message}
+                              onChange={(e) => handleInputChange('message', e.target.value)}
+                              onBlur={() => handleInputBlur('message')}
+                              className={`w-full text-xs py-3 pl-4 pr-10 bg-zinc-50 dark:bg-zinc-950 border rounded-lg focus:ring-1 outline-none transition-all dark:text-zinc-200 ${
+                                formErrors.message 
+                                  ? 'border-red-500 focus:ring-red-500/20 focus:border-red-500 ring-1 ring-red-500/10' 
+                                  : touched.message && formData.message.trim().length >= 10 
+                                    ? 'border-emerald-500 focus:ring-emerald-500/20 focus:border-emerald-500 ring-1 ring-emerald-500/10' 
+                                    : 'border-zinc-200 dark:border-zinc-800 focus:ring-blue-500/20 focus:border-blue-500'
+                              }`}
+                              placeholder="Detail your requirements, technology choices, timeline, and goals..."
+                            />
+                            <div className="absolute right-3.5 top-4 flex items-center justify-center pointer-events-none select-none">
+                              {formErrors.message ? (
+                                <AlertCircle size={14} className="text-red-500" />
+                              ) : touched.message && formData.message.trim().length >= 10 ? (
+                                <CheckCircle2 size={14} className="text-emerald-500 animate-pulse" />
+                              ) : null}
+                            </div>
+                          </div>
                           {formErrors.message && (
-                            <p className="text-[9px] text-red-500 font-mono mt-1">{formErrors.message}</p>
+                            <p className="text-[9px] text-red-500 font-mono mt-1 flex items-center gap-1">
+                              <AlertCircle size={10} /> {formErrors.message}
+                            </p>
                           )}
                         </div>
 
