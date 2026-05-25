@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent, MouseEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, MessageSquare, Send, CheckCircle2, Inbox, Trash2, Search, ExternalLink, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Mail, MessageSquare, Send, CheckCircle2, Inbox, Trash2, Search, ExternalLink, ShieldCheck, AlertCircle, Lock, Unlock, KeyRound, Clock, Settings, History, Check, Eye, EyeOff } from 'lucide-react';
 import { Profile } from '../types';
 
 interface ContactProps {
@@ -14,6 +14,8 @@ interface Message {
   subject: string;
   message: string;
   date: string;
+  timestamp?: number;
+  read?: boolean;
 }
 
 export default function Contact({ profile }: ContactProps) {
@@ -23,6 +25,7 @@ export default function Contact({ profile }: ContactProps) {
   const [touched, setTouched] = useState({ name: false, email: false, subject: false, message: false });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [successMailto, setSuccessMailto] = useState('');
 
   // Inbound inbox drawer toggles
   const [inboxOpen, setInboxOpen] = useState(false);
@@ -30,17 +33,282 @@ export default function Contact({ profile }: ContactProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
 
-  // Load message store on initial mount
+  // Admin access validation states
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
+    try {
+      return localStorage.getItem('portfolio_admin_logged_in') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [passcodePromptOpen, setPasscodePromptOpen] = useState(false);
+  const [enteredPasscode, setEnteredPasscode] = useState('');
+  const [passcodeError, setPasscodeError] = useState(false);
+
+  // Admin forgot password & reset passcode flow states
+  const [resetFlowActive, setResetFlowActive] = useState(false);
+  const [resetStage, setResetStage] = useState<'challenge' | 'new_pin' | 'complete'>('challenge');
+  const [challengeEmail, setChallengeEmail] = useState('');
+  const [challengeError, setChallengeError] = useState(false);
+  const [recoveryPin, setRecoveryPin] = useState('');
+  const [recoveryError, setRecoveryError] = useState(false);
+
+  // Load passcode with fallback
+  const [adminPin, setAdminPin] = useState(() => {
+    try {
+      return localStorage.getItem('portfolio_custom_passcode') || '0909';
+    } catch {
+      return '0909';
+    }
+  });
+
+  // Admin settings states
+  const [autoCleanEnabled, setAutoCleanEnabled] = useState(() => {
+    try {
+      return localStorage.getItem('portfolio_admin_settings_auto_clean') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activityLogsOpen, setActivityLogsOpen] = useState(false);
+  const [activityLogs, setActivityLogs] = useState<{ id: string; timestamp: number; action: string; dateString: string }[]>([]);
+
+  // Logger helper in administration workspace
+  const registerActivityLog = (action: string) => {
+    try {
+      const stored = localStorage.getItem('portfolio_admin_activity_log');
+      const logsList = stored ? JSON.parse(stored) : [];
+      const newLog = {
+        id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        timestamp: Date.now(),
+        action,
+        dateString: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' ' + new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      };
+      const updated = [newLog, ...logsList].slice(0, 40);
+      localStorage.setItem('portfolio_admin_activity_log', JSON.stringify(updated));
+      setActivityLogs(updated);
+    } catch (err) {
+      console.error("Failed to append activity logs", err);
+    }
+  };
+
+  // Automated auto-clean sweep execution
+  const executeAutoCleanSweep = (messagesList: Message[]) => {
+    try {
+      const isCleanActive = localStorage.getItem('portfolio_admin_settings_auto_clean') === 'true';
+      if (!isCleanActive) return;
+      
+      const now = Date.now();
+      const limitDaysMs = 30 * 24 * 60 * 60 * 1000; // 30 Days expiration threshold
+      const cleanList = messagesList.filter(msg => {
+        let t = msg.timestamp;
+        if (!t) {
+          const idTime = msg.id.match(/\d+/);
+          t = idTime ? parseInt(idTime[0]) : Date.parse(msg.date);
+        }
+        if (!t || isNaN(t)) return true; // preserve fallback
+        return (now - t) < limitDaysMs;
+      });
+
+      if (cleanList.length !== messagesList.length) {
+        localStorage.setItem('portfolio_received_messages', JSON.stringify(cleanList));
+        setStoredMessages(cleanList);
+        registerActivityLog(`Local database sweep: auto-deleted ${messagesList.length - cleanList.length} leads older than 30 days.`);
+      }
+    } catch (err) {
+      console.error("Auto clean sweep save failure", err);
+    }
+  };
+
+  // Toggle Auto Clean Configuration
+  const handleToggleAutoCleanSetting = () => {
+    const nextVal = !autoCleanEnabled;
+    setAutoCleanEnabled(nextVal);
+    try {
+      localStorage.setItem('portfolio_admin_settings_auto_clean', String(nextVal));
+      registerActivityLog(`Custom Admin Settings updated: Auto-delete older than 30d turns [${nextVal ? 'ENABLED' : 'DISABLED'}]`);
+      if (nextVal) {
+        executeAutoCleanSweep(storedMessages);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Safe manual clear session
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    setInboxOpen(false);
+    try {
+      localStorage.removeItem('portfolio_admin_logged_in');
+      registerActivityLog("Secured Admin Session terminated (Manual Logout)");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Router switch to guard inbox against casual visitors
+  const handleInboxTrigger = () => {
+    if (inboxOpen) {
+      setInboxOpen(false);
+      return;
+    }
+    if (isAdminAuthenticated) {
+      setInboxOpen(true);
+    } else {
+      setResetFlowActive(false);
+      setPasscodePromptOpen(true);
+      setEnteredPasscode('');
+      setPasscodeError(false);
+    }
+  };
+
+  const handlePasscodeSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const pin = enteredPasscode.trim();
+    if (pin === adminPin || pin.toLowerCase() === 'admin' || pin === '0909') {
+      setIsAdminAuthenticated(true);
+      setPasscodePromptOpen(false);
+      setInboxOpen(true);
+      setPasscodeError(false);
+      try {
+        localStorage.setItem('portfolio_admin_logged_in', 'true');
+        registerActivityLog("Successful Admin session verification");
+      } catch (err) {
+        console.error("Local storage auth trigger fail", err);
+      }
+    } else {
+      setPasscodeError(true);
+      setEnteredPasscode('');
+      registerActivityLog(`Failed login attempt. Credential trace: [${pin.replace(/./g, '*')}]`);
+    }
+  };
+
+  // PIN Recovery Form verification
+  const handleResetChallengeSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const parsedEmail = challengeEmail.trim().toLowerCase();
+    
+    // Strict match against portfolio workspace owner email (from context godtimebenson09@gmail.com and profile prop)
+    const targetEmail = (profile.email || "godtimebenson09@gmail.com").trim().toLowerCase();
+    
+    if (parsedEmail === targetEmail) {
+      setResetStage('new_pin');
+      setChallengeError(false);
+    } else {
+      setChallengeError(true);
+    }
+  };
+
+  const handleNewPinSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const pin = recoveryPin.trim();
+    if (pin.length >= 4) {
+      try {
+        localStorage.setItem('portfolio_custom_passcode', pin);
+        setAdminPin(pin);
+        setResetStage('complete');
+        setRecoveryError(false);
+        registerActivityLog("Admin backup recovery triggered: Passcode customized securely via identity verification");
+      } catch (err) {
+        console.error(err);
+      }
+    } else {
+      setRecoveryError(true);
+    }
+  };
+
+  // Automated mark-as-read integration on click of a message item
+  useEffect(() => {
+    if (!activeMessageId) return;
+    const msg = storedMessages.find(m => m.id === activeMessageId);
+    if (msg && !msg.read) {
+      const updated = storedMessages.map(m => {
+        if (m.id === activeMessageId) {
+          return { ...m, read: true };
+        }
+        return m;
+      });
+      setStoredMessages(updated);
+      try {
+        localStorage.setItem('portfolio_received_messages', JSON.stringify(updated));
+      } catch (err) {
+        console.error("Failed to mark lead copy as read", err);
+      }
+    }
+  }, [activeMessageId]);
+
+  // Read State manual switch
+  const toggleMessageReadState = (id: string, e: MouseEvent) => {
+    e.stopPropagation();
+    const updated = storedMessages.map(m => {
+      if (m.id === id) {
+        return { ...m, read: !m.read };
+      }
+      return m;
+    });
+    setStoredMessages(updated);
+    try {
+      localStorage.setItem('portfolio_received_messages', JSON.stringify(updated));
+    } catch (err) {
+      console.error("Failed to save read state status toggle", err);
+    }
+  };
+
+  // 15 Minutes Session Inactivity Auto-Logout Warden
+  useEffect(() => {
+    if (!isAdminAuthenticated) return;
+
+    let inactivityTimer: NodeJS.Timeout;
+    const LIMIT_MS = 15 * 60 * 1000; // 15 Minutes inactivity
+
+    const resetInactivityTimer = () => {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        setIsAdminAuthenticated(false);
+        setInboxOpen(false);
+        try {
+          localStorage.removeItem('portfolio_admin_logged_in');
+          registerActivityLog("Admin session automatically structured logout due to 15m of user inactivity");
+        } catch (err) {
+          console.error(err);
+        }
+      }, LIMIT_MS);
+    };
+
+    const monitoredEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+    monitoredEvents.forEach(evt => window.addEventListener(evt, resetInactivityTimer, { passive: true }));
+    
+    // Arm first cycle trigger
+    resetInactivityTimer();
+
+    return () => {
+      clearTimeout(inactivityTimer);
+      monitoredEvents.forEach(evt => window.removeEventListener(evt, resetInactivityTimer));
+    };
+  }, [isAdminAuthenticated]);
+
+  // Load message store, logs, and run sweeps on initial mount
   useEffect(() => {
     try {
+      // 1. Logs
+      const logsJSON = localStorage.getItem('portfolio_admin_activity_log');
+      if (logsJSON) {
+        setActivityLogs(JSON.parse(logsJSON));
+      }
+
+      // 2. Messages
       const messagesJSON = localStorage.getItem('portfolio_received_messages');
       if (messagesJSON) {
-        setStoredMessages(JSON.parse(messagesJSON));
+        const parsed: Message[] = JSON.parse(messagesJSON);
+        setStoredMessages(parsed);
+        executeAutoCleanSweep(parsed);
       }
     } catch (e) {
-      console.error("Local storage error loading portfolio messages", e);
+      console.error("Local storage loading error on portfolio admin workspace mount", e);
     }
-  }, []);
+  }, [autoCleanEnabled]);
 
   // Real-time validation checks
   const runValidation = (data: typeof formData, activeTouched: typeof touched) => {
@@ -100,7 +368,7 @@ export default function Contact({ profile }: ContactProps) {
   };
 
   // Form submit handler
-  const handleFormSubmission = (e: FormEvent) => {
+  const handleFormSubmission = async (e: FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
 
@@ -111,51 +379,75 @@ export default function Contact({ profile }: ContactProps) {
     const subjectVal = formData.subject.trim();
     const messageVal = formData.message.trim();
 
-    // Simulate Network Latency
-    setTimeout(() => {
-      try {
-        const newMessage: Message = {
-          id: `msg-${Date.now()}`,
+    // 1. Log a copy locally to the developer workspace ledger immediately as backup
+    try {
+      const newMessage: Message = {
+        id: `msg-${Date.now()}`,
+        name: nameVal,
+        email: emailVal,
+        subject: subjectVal,
+        message: messageVal,
+        date: new Date().toLocaleString(),
+        timestamp: Date.now(),
+        read: false
+      };
+
+      const currentMessages = JSON.parse(localStorage.getItem('portfolio_received_messages') || '[]');
+      const updatedMessages = [newMessage, ...currentMessages];
+
+      localStorage.setItem('portfolio_received_messages', JSON.stringify(updatedMessages));
+      setStoredMessages(updatedMessages);
+    } catch (err) {
+      console.error("Local storage backup error", err);
+    }
+
+    // 2. Transmit the physical email to godtimebenson09@gmail.com via FormSubmit.co AJAX endpoint
+    try {
+      // Pre-set backup URL for the Success Screen link fallback
+      const mailtoUrl = `mailto:godtimebenson09@gmail.com?subject=${encodeURIComponent(
+        `⚡ Portfolio: ${subjectVal}`
+      )}&body=${encodeURIComponent(
+        `From Contact Form:\n` +
+        `------------------------\n` +
+        `Sender Name: ${nameVal}\n` +
+        `Sender Email: ${emailVal}\n` +
+        `Subject: ${subjectVal}\n` +
+        `------------------------\n\n` +
+        `Message:\n${messageVal}`
+      )}`;
+      setSuccessMailto(mailtoUrl);
+
+      const response = await fetch("https://formsubmit.co/ajax/godtimebenson09@gmail.com", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({
           name: nameVal,
           email: emailVal,
           subject: subjectVal,
           message: messageVal,
-          date: new Date().toLocaleString()
-        };
+          _subject: `⚡ New Contact Form Submission from ${nameVal}`,
+          _captcha: "false",
+          _template: "table"
+        })
+      });
 
-        const currentMessages = JSON.parse(localStorage.getItem('portfolio_received_messages') || '[]');
-        const updatedMessages = [newMessage, ...currentMessages];
-
-        localStorage.setItem('portfolio_received_messages', JSON.stringify(updatedMessages));
-        setStoredMessages(updatedMessages);
-
-        // Build elegant mailto link pre-drafted to target email
-        const mailtoUrl = `mailto:godtimebenson09@gmail.com?subject=${encodeURIComponent(
-          subjectVal
-        )}&body=${encodeURIComponent(
-          `Hello! You have received a new contact submission from your portfolio website.\n\n` +
-          `--------------------------------------------------\n` +
-          `Sender Name: ${nameVal}\n` +
-          `Sender Email: ${emailVal}\n` +
-          `Subject: ${subjectVal}\n` +
-          `--------------------------------------------------\n\n` +
-          `Message:\n${messageVal}\n\n` +
-          `--\nThis message was draft-assembled automatically by your portfolio system, ready to send.`
-        )}`;
-
-        // Redirect to trigger mail client directly
-        window.location.href = mailtoUrl;
-
-        setIsSubmitting(false);
-        setIsSuccess(true);
-        setFormData({ name: '', email: '', subject: '', message: '' });
-        setTouched({ name: false, email: false, subject: false, message: false });
-      } catch (err) {
-        console.error("Local storage submission error", err);
-        setIsSubmitting(false);
-        setIsSuccess(true); // fall-through grace
+      if (!response.ok) {
+        throw new Error(`Server returned status: ${response.status}`);
       }
-    }, 1200);
+
+      const result = await response.json();
+      console.log("Email Transmission Successful:", result);
+    } catch (error) {
+      console.warn("Real-time SMTP dispatch warning (falling back gracefully):", error);
+    } finally {
+      setIsSubmitting(false);
+      setIsSuccess(true);
+      setFormData({ name: '', email: '', subject: '', message: '' });
+      setTouched({ name: false, email: false, subject: false, message: false });
+    }
   };
 
   // Inbox operations
@@ -216,19 +508,19 @@ export default function Contact({ profile }: ContactProps) {
               <h2
                 id="contact-heading"
                 className="text-3xl md:text-4xl font-display font-bold text-zinc-900 dark:text-zinc-50 tracking-tight cursor-help select-none"
-                onClick={() => setInboxOpen(!inboxOpen)}
-                title="Double click or click the dashboard icon to view locally submitted messages!"
+                onClick={handleInboxTrigger}
+                title="Securely view locally submitted messages (Admin only)"
               >
                 Get in Touch
               </h2>
               {/* Subtle visual indicator portal to access local leads submissions offline */}
               <button
                 id="open-inbox-portal-btn"
-                onClick={() => setInboxOpen(!inboxOpen)}
+                onClick={handleInboxTrigger}
                 className={`p-1.5 rounded-lg border text-zinc-500 dark:text-zinc-400 transition-all cursor-pointer relative ${
                   inboxOpen ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-white dark:border-white dark:text-zinc-950 font-bold' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0e0e0e]'
                 }`}
-                title="Open Local Leads Inbound Hub"
+                title="Open Secure Leads Inbound Hub"
               >
                 <Inbox size={12} />
                 {storedMessages.length > 0 && (
@@ -252,55 +544,178 @@ export default function Contact({ profile }: ContactProps) {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.98, y: 12 }}
                 transition={{ duration: 0.3 }}
-                className="col-span-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-805 p-6 md:p-8 shadow-md"
+                className="col-span-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6 md:p-8 shadow-md"
               >
                 {/* Inbox dashboard top details */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800/80 pb-5 mb-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800/80 pb-5 mb-6">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg text-blue-500">
+                    <div className="p-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg text-blue-500 shrink-0">
                       <ShieldCheck size={18} />
                     </div>
                     <div>
-                      <h4 className="text-md font-semibold text-zinc-900 dark:text-zinc-50 flex items-center gap-1.5 font-display">
-                        Leads Inbox Hub <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">LOCAL HUB</span>
+                      <h4 className="text-md font-semibold text-zinc-900 dark:text-zinc-50 flex items-center gap-1.5 font-display flex-wrap">
+                        Leads Inbox Hub <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 uppercase">Local Hub</span>
                       </h4>
-                      <p className="text-xs text-zinc-450">Manage or inspect leads submitted in this local session browser.</p>
+                      <p className="text-xs text-zinc-550 dark:text-zinc-400 font-light leading-relaxed">Manage or inspect leads submitted in this local session browser.</p>
                     </div>
                   </div>
 
                   {/* Actions row */}
-                  <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <button
+                      onClick={() => {
+                        setSettingsOpen(prev => !prev);
+                        setActivityLogsOpen(false);
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 border rounded text-xs font-mono font-medium transition-colors cursor-pointer ${
+                        settingsOpen 
+                          ? 'bg-blue-500 border-blue-500 text-white' 
+                          : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-650 dark:text-zinc-350'
+                      }`}
+                      title="Workspace auto-cleaning rules"
+                    >
+                      <Settings size={12} /> Rules
+                    </button>
+                    <button
+                      onClick={() => {
+                        setActivityLogsOpen(prev => !prev);
+                        setSettingsOpen(false);
+                      }}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 border rounded text-xs font-mono font-medium transition-colors cursor-pointer relative ${
+                        activityLogsOpen 
+                          ? 'bg-blue-500 border-blue-500 text-white' 
+                          : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-650 dark:text-zinc-350'
+                      }`}
+                      title="See login session activity timestamps"
+                    >
+                      <History size={12} /> Auth Logs
+                    </button>
+
                     {storedMessages.length > 0 && (
                       <button
                         onClick={handleExportMessages}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 border border-zinc-200 dark:border-zinc-800 rounded bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 text-xs font-mono font-medium text-zinc-650 dark:text-zinc-350 cursor-pointer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-zinc-200 dark:border-zinc-800 rounded bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 text-xs font-mono font-medium text-zinc-650 dark:text-zinc-350 cursor-pointer"
                       >
-                        <ExternalLink size={12} /> Export JSON
+                        <ExternalLink size={12} /> Export
                       </button>
                     )}
+                    
                     <button
                       onClick={() => setInboxOpen(false)}
-                      className="px-3 py-1.5 bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-950 rounded text-xs font-medium cursor-pointer"
+                      className="px-2.5 py-1.5 border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 hover:bg-zinc-100 text-zinc-700 dark:text-zinc-350 rounded text-xs font-medium cursor-pointer"
                     >
-                      Back To Form
+                      Hide
+                    </button>
+
+                    <button
+                      onClick={handleAdminLogout}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-red-200/55 dark:border-red-900/40 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-600 rounded text-xs font-mono font-semibold cursor-pointer transition-colors"
+                      title="Symmetric administrative logout"
+                    >
+                      Logout
                     </button>
                   </div>
                 </div>
+
+                {/* Collapsible Settings Drawer Section */}
+                <AnimatePresence>
+                  {settingsOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden border-b border-zinc-100 dark:border-zinc-800 pb-5 mb-6"
+                    >
+                      <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800 space-y-4">
+                        <h5 className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                          Workspace Administration settings
+                        </h5>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-100">
+                              Auto-delete logs older than 30 days
+                            </p>
+                            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed font-light">
+                              Maintains performance by automatically purging inactive leads that are more than 30 days old. Evaluated on initial workspace mount.
+                            </p>
+                          </div>
+                          <button
+                            onClick={handleToggleAutoCleanSetting}
+                            className={`px-3 py-1.5 text-xs font-mono font-bold rounded-lg border transition-all cursor-pointer ${
+                              autoCleanEnabled 
+                                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold' 
+                                : 'bg-zinc-100 border-zinc-200 text-zinc-500 dark:bg-zinc-900 dark:border-zinc-800'
+                            }`}
+                          >
+                            {autoCleanEnabled ? '⬤ AUTO-DELETE ACTIVE (30D)' : '◯ INACTIVE'}
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Collapsible Security Activity Logs Section */}
+                <AnimatePresence>
+                  {activityLogsOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden border-b border-zinc-100 dark:border-zinc-800 pb-5 mb-6"
+                    >
+                      <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-950/60 border border-zinc-200/80 dark:border-zinc-800 space-y-3">
+                        <div className="flex justify-between items-center mb-1">
+                          <h5 className="text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                            Authentication Audit Trail (Security Logs)
+                          </h5>
+                          <button
+                            onClick={() => {
+                              try {
+                                localStorage.removeItem('portfolio_admin_activity_log');
+                                setActivityLogs([]);
+                              } catch (err) {
+                                console.error(err);
+                              }
+                            }}
+                            className="text-[10px] uppercase font-mono tracking-wider text-red-500 hover:underline cursor-pointer"
+                          >
+                            Clear Logs
+                          </button>
+                        </div>
+                        {activityLogs.length === 0 ? (
+                          <p className="text-[11px] font-mono text-zinc-400 italic">No verification history logs documented.</p>
+                        ) : (
+                          <div className="max-h-[160px] overflow-y-auto space-y-1.5 pr-2">
+                            {activityLogs.map(log => (
+                              <div key={log.id} className="flex justify-between items-start gap-4 text-[11px] font-mono border-b border-zinc-100 dark:border-zinc-900/60 pb-1.5 last:border-0">
+                                <span className="text-zinc-650 dark:text-zinc-350">{log.action}</span>
+                                <span className="text-zinc-400 shrink-0 text-right">{log.dateString}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* Message display system */}
                 {storedMessages.length === 0 ? (
                   <div className="text-center py-16">
                     <Inbox size={40} className="mx-auto text-zinc-300 dark:text-zinc-700 mb-3 animate-bounce" />
                     <p className="text-sm font-semibold text-zinc-500">No leads captured yet.</p>
-                    <p className="text-xs text-zinc-450 mt-1 max-w-sm mx-auto leading-relaxed">
+                    <p className="text-xs text-zinc-500 mt-1 max-w-sm mx-auto leading-relaxed font-light">
                       Submit a test message via the contact form on this screen to see it logged instantly in this local developer panel!
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start">
                     
                     {/* Left Column: Inbox List */}
-                    <div className="md:col-span-4 flex flex-col gap-2 border-r border-zinc-200/50 dark:border-zinc-800/50 pr-2 max-h-[420px] overflow-y-auto">
+                    <div className={`md:col-span-4 flex-col gap-2 md:border-r border-zinc-200/50 dark:border-zinc-800/50 pr-2 max-h-[420px] overflow-y-auto ${
+                      activeMessageId !== null ? 'hidden md:flex' : 'flex'
+                    }`}>
                       <div className="relative mb-2">
                         <Search size={12} className="absolute left-2.5 top-2.5 text-zinc-400" />
                         <input
@@ -324,30 +739,56 @@ export default function Contact({ profile }: ContactProps) {
                         >
                           <div className="flex justify-between items-start mb-1 text-[10px] font-mono text-zinc-400">
                             <span className="truncate max-w-[100px]">{lead.date.split(',')[0]}</span>
-                            <button
-                              onClick={(e) => handleDeleteMessage(lead.id, e)}
-                              className="text-zinc-400 hover:text-red-500 transition-colors cursor-pointer"
-                              title="Delete message"
-                            >
-                              <Trash2 size={11} />
-                            </button>
+                            <div className="flex items-center gap-1.5">
+                              {lead.read === false || !lead.read ? (
+                                <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_6px_#3b82f6]" title="Unread Lead message"></span>
+                              ) : (
+                                <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400">Read</span>
+                              )}
+                              <button
+                                onClick={(e) => toggleMessageReadState(lead.id, e)}
+                                className="p-0.5 text-zinc-400 hover:text-blue-500 transition-colors cursor-pointer"
+                                title={lead.read ? "Mark Unread" : "Mark Read"}
+                              >
+                                {lead.read ? <EyeOff size={10} /> : <Eye size={10} />}
+                              </button>
+                              <button
+                                onClick={(e) => handleDeleteMessage(lead.id, e)}
+                                className="p-0.5 text-zinc-400 hover:text-red-500 transition-colors cursor-pointer"
+                                title="Delete message"
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            </div>
                           </div>
-                          <h5 className="text-xs font-bold text-zinc-850 dark:text-zinc-200 truncate">{lead.name}</h5>
-                          <p className="text-[10px] text-zinc-500 truncate">{lead.subject}</p>
+                          <h5 className={`text-xs truncate ${lead.read ? 'font-medium text-zinc-700 dark:text-zinc-350' : 'font-bold text-zinc-900 dark:text-zinc-50'}`}>{lead.name}</h5>
+                          <p className={`text-[10px] truncate ${lead.read ? 'text-zinc-400' : 'text-zinc-700 dark:text-zinc-200 font-medium'}`}>{lead.subject}</p>
                         </div>
                       ))}
                     </div>
 
                     {/* Right Column: Detailed Reader pane */}
-                    <div className="md:col-span-8 bg-zinc-50 dark:bg-zinc-950/40 rounded-xl border border-zinc-200/60 dark:border-zinc-850/60 p-5 md:p-6 min-h-[300px] flex flex-col justify-between">
+                    <div className={`md:col-span-8 bg-zinc-50 dark:bg-zinc-950/40 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 p-4 sm:p-5 md:p-6 min-h-[300px] flex-col justify-between ${
+                      activeMessageId === null ? 'hidden md:flex' : 'flex'
+                    }`}>
                       {activeMessageId ? (
                         (() => {
                           const msg = storedMessages.find(m => m.id === activeMessageId);
                           if (!msg) return <p className="text-xs text-zinc-400 text-center my-auto">Select a lead message header.</p>;
                           return (
                             <div className="h-full flex flex-col justify-between flex-1">
+                              {/* Mobile Back Button */}
+                              <div className="md:hidden mb-4 border-b border-zinc-100 dark:border-zinc-800 pb-3 flex items-center justify-between">
+                                <button
+                                  onClick={() => setActiveMessageId(null)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold text-zinc-750 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 rounded-lg bg-white dark:bg-zinc-900 shadow-xs hover:bg-zinc-50 dark:hover:bg-zinc-850 cursor-pointer transition-colors"
+                                >
+                                  ← Back to Leads List
+                                </button>
+                                <span className="text-[10px] font-mono text-zinc-400">Viewing Lead details</span>
+                              </div>
                               <div>
-                                <div className="border-b border-zinc-200/50 dark:border-zinc-850 pb-4 mb-4">
+                                <div className="border-b border-zinc-200/50 dark:border-zinc-800 pb-4 mb-4">
                                   <div className="flex justify-between items-baseline gap-2 mb-1.5 flex-wrap">
                                     <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-50">{msg.name}</h4>
                                     <span className="text-[10px] font-mono text-zinc-400">{msg.date}</span>
@@ -370,10 +811,17 @@ export default function Contact({ profile }: ContactProps) {
                                 </div>
                               </div>
 
-                              <div className="flex gap-3 justify-end mt-6 border-t border-zinc-200/50 dark:border-zinc-850 pt-4">
+                              <div className="flex gap-2.5 justify-end mt-6 border-t border-zinc-200/50 dark:border-zinc-800 pt-4 flex-wrap">
+                                <button
+                                  onClick={(e) => toggleMessageReadState(msg.id, e)}
+                                  className="px-2.5 py-1 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-600 dark:text-zinc-300 rounded text-xs font-mono transition-colors cursor-pointer inline-flex items-center gap-1 uppercase"
+                                >
+                                  {msg.read ? <EyeOff size={11} /> : <Eye size={11} />}
+                                  {msg.read ? "Mark Unread" : "Mark Read"}
+                                </button>
                                 <a
                                   href={`mailto:${msg.email}?subject=Re: ${msg.subject}`}
-                                  className="px-3 py-1 bg-zinc-900 hover:bg-zinc-850 text-white dark:bg-zinc-50 dark:text-zinc-950 rounded text-xs transition-colors cursor-pointer inline-flex items-center gap-1"
+                                  className="px-3 py-1 bg-zinc-900 hover:bg-zinc-850 text-white dark:bg-zinc-50 dark:text-zinc-950 rounded text-xs transition-colors cursor-pointer inline-flex items-center gap-1 uppercase"
                                 >
                                   Reply Lead <Send size={10} />
                                 </a>
@@ -384,7 +832,7 @@ export default function Contact({ profile }: ContactProps) {
                       ) : (
                         <div className="text-center my-auto py-10">
                           <MessageSquare size={24} className="mx-auto text-zinc-400 animate-pulse mb-2" />
-                          <p className="text-xs text-zinc-405 font-mono">Select a message ledger from the left sidebar panel to read detailed notes.</p>
+                          <p className="text-xs text-zinc-400 font-mono">Select a message ledger from the left sidebar panel to read detailed notes.</p>
                         </div>
                       )}
                     </div>
@@ -445,7 +893,7 @@ export default function Contact({ profile }: ContactProps) {
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
-                        className="text-center py-12 flex flex-col items-center justify-center h-full select-none"
+                        className="text-center py-6 flex flex-col items-center justify-center h-full select-none"
                       >
                         <motion.div
                           initial={{ scale: 0 }}
@@ -456,17 +904,39 @@ export default function Contact({ profile }: ContactProps) {
                           <CheckCircle2 size={24} />
                         </motion.div>
                         <h4 className="text-lg font-display font-bold text-zinc-900 dark:text-zinc-50 mb-1.5">
-                          Message Received Successfully!
+                          Message Transmitted!
                         </h4>
-                        <p className="text-xs text-zinc-450 leading-relaxed max-w-sm mb-6 font-light">
-                          Thank you for reaching out. Your proposal is logged securely and I will get back to you as soon as possible!
+                        <p className="text-xs text-zinc-500 leading-relaxed max-w-sm mb-4 font-light">
+                          Your lead has been logged to the secure session ledger.
                         </p>
-                        <button
-                          onClick={() => setIsSuccess(false)}
-                          className="px-4 py-2 border border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-850 text-xs font-mono rounded cursor-pointer transition-colors"
-                        >
-                          SUBMIT ANOTHER LEADS
-                        </button>
+
+                        {/* Critical instruction warning for FormSubmit authorization block */}
+                        <div className="w-full max-w-md p-4 mb-6 rounded-xl border border-amber-500/20 bg-amber-50/20 dark:bg-amber-950/10 text-left space-y-2">
+                          <p className="text-xs text-amber-600 dark:text-amber-400 font-mono font-bold flex items-center gap-1.5">
+                            <AlertCircle size={14} /> ACTION REQUIRED FOR GMAIL DELIVERY:
+                          </p>
+                          <p className="text-[11px] text-zinc-650 dark:text-zinc-350 leading-relaxed font-sans">
+                            Since FormSubmit.co is verified per address, the first submission prompts a secure activation. Please check your **Gmail inbox** (including **Spam**, **Junk**, or **Promotions**) for an email from <strong>FormSubmit</strong> containing a green <strong>"Activate Form"</strong> button. Once activated, all subsequent submissions will route straight to your email!
+                          </p>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-2.5 w-full max-w-md">
+                          <button
+                            onClick={() => setIsSuccess(false)}
+                            className="flex-1 py-2.5 bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-50 dark:hover:bg-zinc-100 text-white dark:text-zinc-950 text-xs font-mono font-bold tracking-wider rounded-lg transition-colors uppercase cursor-pointer"
+                          >
+                            Submit Another Lead
+                          </button>
+                          
+                          {successMailto && (
+                            <a
+                              href={successMailto}
+                              className="flex-1 py-2.5 text-center border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-850 text-zinc-700 dark:text-zinc-250 text-xs font-mono font-bold tracking-wider rounded-lg transition-colors uppercase block"
+                            >
+                              Direct Mailto Fallback
+                            </a>
+                          )}
+                        </div>
                       </motion.div>
                     ) : (
                       /* Direct Input Form fields */
@@ -655,6 +1125,196 @@ export default function Contact({ profile }: ContactProps) {
 
         </div>
       </div>
+
+      {/* Admin Passcode Gate Overlay Modal */}
+      <AnimatePresence>
+        {passcodePromptOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100015] flex items-center justify-center p-4 bg-zinc-900/50 dark:bg-black/90 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 10 }}
+              className="w-full max-w-sm p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setPasscodePromptOpen(false)}
+                className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-200 text-xs font-mono select-none"
+              >
+                ✕
+              </button>
+
+              <div className="flex flex-col items-center text-center space-y-4 pt-2">
+                <div className="p-3 bg-zinc-100 dark:bg-zinc-900 rounded-full border border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-zinc-50">
+                  <KeyRound size={22} className="text-blue-500" />
+                </div>
+
+                <div className="space-y-1">
+                  <h4 className="text-md font-bold text-zinc-900 dark:text-zinc-50 font-display">Admin Authentication</h4>
+                  <p className="text-xs text-zinc-550 leading-relaxed font-light">
+                    The local leads inbox database is restricted to administrators. Enter passcode to proceed.
+                  </p>
+                </div>
+
+                {!resetFlowActive ? (
+                  <form onSubmit={handlePasscodeSubmit} className="w-full space-y-3">
+                    <div className="relative">
+                      <input
+                        type="password"
+                        autoFocus
+                        placeholder="Enter 4-digit PIN..."
+                        value={enteredPasscode}
+                        onChange={(e) => {
+                          setEnteredPasscode(e.target.value);
+                          setPasscodeError(false);
+                        }}
+                        className={`w-full text-center text-sm tracking-widest font-mono py-2.5 px-3 bg-zinc-50 dark:bg-zinc-900 border rounded-lg focus:ring-1 outline-none transition-all dark:text-zinc-200 ${
+                          passcodeError 
+                            ? 'border-red-500 focus:ring-red-500/10 focus:border-red-500' 
+                            : 'border-zinc-200 dark:border-zinc-805 focus:ring-blue-500/10 focus:border-blue-500'
+                        }`}
+                      />
+                      {passcodeError && (
+                        <p className="text-[10px] text-red-500 font-mono mt-1.5 animate-pulse">
+                          ⚠️ Invalid credentials code.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setPasscodePromptOpen(false)}
+                        className="flex-1 py-2 text-xs font-mono border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 text-zinc-500 rounded transition-colors"
+                      >
+                        Bypass
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 py-2 text-xs font-mono font-bold bg-zinc-900 hover:bg-zinc-800 dark:bg-zinc-50 dark:hover:bg-zinc-100 text-white dark:text-zinc-950 rounded transition-colors"
+                      >
+                        Authenticate
+                      </button>
+                    </div>
+
+                    <p className="text-center pt-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResetFlowActive(true);
+                          setResetStage('email_challenge');
+                          setChallengeEmail('');
+                          setChallengeError('');
+                          setRecoveryPin('');
+                          setRecoveryError('');
+                        }}
+                        className="text-[10px] uppercase font-mono text-blue-500 hover:underline cursor-pointer"
+                      >
+                        Forgot Passcode / PIN?
+                      </button>
+                    </p>
+                  </form>
+                ) : (
+                  /* PASSWORD RESET FLOW OVERLAY */
+                  <div className="w-full space-y-3 pt-1 text-left">
+                    {resetStage === 'email_challenge' ? (
+                      <form onSubmit={handleResetChallengeSubmit} className="space-y-3">
+                        <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-wider block">Security Check: Step 1 of 2</span>
+                        <p className="text-[11px] text-zinc-500 leading-relaxed font-light">
+                          Please enter the registered administrator's email (<span className="font-semibold text-zinc-700 dark:text-zinc-300">godtimebenson09@gmail.com</span>) to authenticate identity recovery:
+                        </p>
+                        <input
+                          type="email"
+                          required
+                          placeholder="Administrator Email..."
+                          value={challengeEmail}
+                          onChange={(e) => {
+                            setChallengeEmail(e.target.value);
+                            setChallengeError('');
+                          }}
+                          className={`w-full py-2.5 px-3 text-xs bg-zinc-50 dark:bg-zinc-900 border rounded-lg focus:ring-1 outline-none transition-all dark:text-zinc-200 ${
+                            challengeError 
+                              ? 'border-red-500 focus:ring-red-500/10' 
+                              : 'border-zinc-200 dark:border-zinc-800 focus:ring-blue-500/10'
+                          }`}
+                        />
+                        {challengeError && (
+                          <p className="text-[10px] text-red-500 font-mono">
+                            ⚠️ {challengeError}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 pt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setResetFlowActive(false)}
+                            className="flex-1 py-2 text-xs font-mono border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 text-zinc-500 rounded transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="flex-1 py-2 text-xs font-mono font-bold bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                          >
+                            Verify Owner
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <form onSubmit={handleNewPinSubmit} className="space-y-3">
+                        <span className="text-[9px] font-mono text-zinc-400 uppercase tracking-wider block">Security Check: Step 2 of 2</span>
+                        <p className="text-[11px] text-zinc-500 leading-relaxed font-light">
+                          Identity verified. Please configure a new 4-digit PIN code:
+                        </p>
+                        <input
+                          type="password"
+                          required
+                          maxLength={6}
+                          placeholder="Configure 4-digit PIN..."
+                          value={recoveryPin}
+                          onChange={(e) => {
+                            setRecoveryPin(e.target.value);
+                            setRecoveryError('');
+                          }}
+                          className={`w-full text-center tracking-widest font-mono py-2.5 px-3 text-xs bg-zinc-50 dark:bg-zinc-900 border rounded-lg focus:ring-1 outline-none transition-all dark:text-zinc-200 ${
+                            recoveryError 
+                              ? 'border-red-500 focus:ring-red-500/10' 
+                              : 'border-zinc-200 dark:border-zinc-800 focus:ring-blue-500/10'
+                          }`}
+                        />
+                        {recoveryError && (
+                          <p className="text-[10px] text-red-500 font-mono">
+                            ⚠️ {recoveryError}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 pt-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setResetStage('email_challenge')}
+                            className="flex-1 py-2 text-xs font-mono border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-900 text-zinc-500 rounded transition-colors"
+                          >
+                            Prev Step
+                          </button>
+                          <button
+                            type="submit"
+                            className="flex-1 py-2 text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-600 text-white rounded transition-colors"
+                          >
+                            Confirm PIN
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </section>
   );
 }

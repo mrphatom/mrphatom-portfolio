@@ -13,31 +13,44 @@ export default function ThreeDBackground() {
     if (!ctx) return;
 
     let animationFrameId: number;
-    let width = (canvas.width = window.innerWidth);
-    let height = (canvas.height = window.innerHeight);
+    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+
+    // Direct, hardware-rastered dimensions scaling
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    ctx.scale(dpr, dpr);
 
     // Dynamic resize responsiveness
     const handleResize = () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      ctx.scale(dpr, dpr);
     };
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', handleResize, { passive: true });
 
-    // Track mouse coordinates for interactive mouse 3D parallax shifts
+    // Track mouse coordinates for interactive mouse 3D parallax shifts (with passive scroll-ready touch integration)
     const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current.targetX = (e.clientX - window.innerWidth / 2) / 60;
-      mouseRef.current.targetY = (e.clientY - window.innerHeight / 2) / 60;
+      mouseRef.current.targetX = (e.clientX - width / 2) / 60;
+      mouseRef.current.targetY = (e.clientY - height / 2) / 60;
     };
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMove, { passive: true });
 
-    // Device orientation for mobile/tablet 3D parallax steering
+    // Device orientation for mobile/tablet 3D parallax steering (with passive events for zero-thread contention)
     const handleOrientation = (e: DeviceOrientationEvent) => {
       if (e.gamma !== null && e.beta !== null) {
         tiltRef.current.targetAlpha = e.gamma / 5; // horizontal steer
         tiltRef.current.targetBeta = (e.beta - 45) / 5; // vertical steer
       }
     };
-    window.addEventListener('deviceorientation', handleOrientation);
+    window.addEventListener('deviceorientation', handleOrientation, { passive: true });
 
     // Set up elegant particles & orbit rings
     interface Shape {

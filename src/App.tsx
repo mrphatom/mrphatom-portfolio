@@ -150,7 +150,7 @@ export default function App() {
 
     const rightPanel = document.getElementById('right-scroll-panel');
     if (rightPanel) {
-      rightPanel.addEventListener('scroll', handleScroll);
+      rightPanel.addEventListener('scroll', handleScroll, { passive: true });
     }
     
     // Fallback/standard behavior for mobile screen viewports
@@ -180,7 +180,7 @@ export default function App() {
       }
     };
     
-    window.addEventListener('scroll', handleWindowScroll);
+    window.addEventListener('scroll', handleWindowScroll, { passive: true });
 
     // Initial sync
     const syncInitialScroll = () => {
