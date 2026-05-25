@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ExternalLink, Code, FolderOpen, X, ArrowUpRight } from 'lucide-react';
 import { Project } from '../types';
@@ -12,6 +12,22 @@ interface ProjectsProps {
 export default function Projects({ projects }: ProjectsProps) {
   const [selectedTag, setSelectedTag] = useState('All');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
+
+  // Dynamic Document Title Custom Synchronization
+  useEffect(() => {
+    const defaultTitle = "Godtime Benson - Developer Portfolio";
+    if (activeProject) {
+      document.title = `${activeProject.title} | Technical Specs`;
+    } else if (selectedTag && selectedTag !== 'All') {
+      document.title = `${selectedTag} Projects | Godtime Benson`;
+    } else {
+      document.title = defaultTitle;
+    }
+
+    return () => {
+      document.title = defaultTitle;
+    };
+  }, [selectedTag, activeProject?.id, activeProject?.title]);
 
   // Extract all unique tags dynamically
   const allTags = ['All', ...Array.from(new Set(projects.flatMap(p => p.tags)))];
