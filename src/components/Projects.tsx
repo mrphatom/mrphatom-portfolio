@@ -12,6 +12,7 @@ interface ProjectsProps {
 export default function Projects({ projects }: ProjectsProps) {
   const [selectedTag, setSelectedTag] = useState('All');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Dynamic Document Title Custom Synchronization
   useEffect(() => {
@@ -29,13 +30,34 @@ export default function Projects({ projects }: ProjectsProps) {
     };
   }, [selectedTag, activeProject?.id, activeProject?.title]);
 
+  // Handle focus event for the keyboard helper shortcut
+  useEffect(() => {
+    const handleFocusSearch = () => {
+      const input = document.getElementById('project-search-input');
+      if (input) {
+        input.focus();
+        (input as HTMLInputElement).select();
+      }
+    };
+    window.addEventListener('focus-project-search', handleFocusSearch);
+    return () => {
+      window.removeEventListener('focus-project-search', handleFocusSearch);
+    };
+  }, []);
+
   // Extract all unique tags dynamically
   const allTags = ['All', ...Array.from(new Set(projects.flatMap(p => p.tags)))];
 
-  // Filter projects based on choice
-  const filteredProjects = selectedTag === 'All'
-    ? projects
-    : projects.filter(p => p.tags.includes(selectedTag));
+  // Filter projects based on both tag selector choice and search input query
+  const filteredProjects = projects.filter(project => {
+    const matchesTag = selectedTag === 'All' || project.tags.includes(selectedTag);
+    const matchesSearch = !searchQuery || (
+      project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+    return matchesTag && matchesSearch;
+  });
 
   return (
     <section
@@ -58,34 +80,77 @@ export default function Projects({ projects }: ProjectsProps) {
             </h2>
           </div>
 
-          {/* Filtering buttons */}
-          <div className="flex flex-wrap gap-2 max-w-xl">
-            {allTags.map((tag) => {
-              const isActive = selectedTag === tag;
-              return (
+          {/* Search bar and filtering buttons row */}
+          <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-4 w-full xl:w-auto">
+            {/* Minimal Project Search Input */}
+            <div className="relative w-full xl:w-60">
+              <input
+                id="project-search-input"
+                type="text"
+                placeholder="Search projects... [S]"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full text-xs font-mono py-2 pl-8 pr-8 bg-zinc-50 dark:bg-zinc-900 border border-zinc-250 dark:border-zinc-805 rounded-lg outline-none text-zinc-700 dark:text-zinc-300 focus:border-zinc-450 dark:focus:border-zinc-700 transition-colors"
+                aria-label="Search projects by keyword"
+              />
+              <span className="absolute left-2.5 top-1.5 text-zinc-400 dark:text-zinc-500 font-mono text-[9px] bg-zinc-100 dark:bg-white/[0.04] border border-zinc-200/50 dark:border-white/[0.04] px-1 py-0.5 rounded pointer-events-none select-none">S</span>
+              {searchQuery && (
                 <button
-                  key={tag}
-                  onClick={() => setSelectedTag(tag)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-mono transition-all cursor-pointer select-none border ${
-                    isActive
-                      ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-zinc-50 dark:border-zinc-50 dark:text-zinc-950'
-                      : 'bg-zinc-50 border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-blue-500 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-850 dark:hover:text-white'
-                  }`}
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-650 dark:hover:text-zinc-100 cursor-pointer"
+                  aria-label="Clear search query"
                 >
-                  {tag}
+                  <X size={12} />
                 </button>
-              );
-            })}
+              )}
+            </div>
+
+            {/* Filtering buttons */}
+            <div className="flex flex-wrap gap-1.5 max-w-xl">
+              {allTags.map((tag) => {
+                const isActive = selectedTag === tag;
+                return (
+                  <button
+                    key={tag}
+                    onClick={() => setSelectedTag(tag)}
+                    className={`px-3 py-1 rounded-full text-[10px] font-mono transition-all cursor-pointer select-none border ${
+                      isActive
+                        ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-zinc-50 dark:border-zinc-50 dark:text-zinc-950'
+                        : 'bg-zinc-50 border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-blue-500 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-850 dark:hover:text-white'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </motion.div>
 
         {/* Dynamic Grid of Cards using Motion */}
-        <motion.div
-          id="project-grid-container"
-          layout
-          className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8"
-        >
-          <AnimatePresence mode="popLayout">
+        {filteredProjects.length === 0 ? (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center py-16 px-4 border border-zinc-200/60 dark:border-zinc-850/60 rounded-xl bg-zinc-50/20 dark:bg-zinc-950/20 text-center"
+          >
+            <FolderOpen size={32} className="text-zinc-450 dark:text-zinc-505 mb-3" />
+            <p className="text-sm font-light text-zinc-500 dark:text-zinc-400">No projects match your filter selection or text search query.</p>
+            <button 
+              onClick={() => { setSearchQuery(''); setSelectedTag('All'); }}
+              className="mt-4 px-4 py-1.5 text-xs font-mono rounded-lg bg-zinc-900 border border-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:border-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 transition-colors cursor-pointer select-none"
+            >
+              Reset Filters & Search
+            </button>
+          </motion.div>
+        ) : (
+          <motion.div
+            id="project-grid-container"
+            layout
+            className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8"
+          >
+            <AnimatePresence mode="popLayout">
             {filteredProjects.map((project) => (
               <motion.div
                 key={project.id}
@@ -185,6 +250,7 @@ export default function Projects({ projects }: ProjectsProps) {
             ))}
           </AnimatePresence>
         </motion.div>
+      )}
 
         {/* Core Detail Specs Overlay Modal Modal (Popup View) */}
         <AnimatePresence>

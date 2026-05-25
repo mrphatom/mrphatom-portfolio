@@ -7,22 +7,28 @@ import Skills from './components/Skills';
 import ExperienceSection from './components/Experience';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
-import { Mail, MapPin, Download, WifiOff, RefreshCw, AlertCircle } from 'lucide-react';
+import { Mail, MapPin, Download, WifiOff, RefreshCw, AlertCircle, Sun, Moon, Monitor } from 'lucide-react';
 import { playSoftClick, playNavTick, setGlobalMute } from './utils/audio';
 import ThreeDBackground from './components/ThreeDBackground';
 
 export default function App() {
-  const [darkMode, setDarkMode] = useState(() => {
+  const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
     try {
-      const storedTheme = localStorage.getItem('theme');
-      if (storedTheme) {
-        return storedTheme === 'dark';
+      const storedThemeMode = localStorage.getItem('theme_mode');
+      if (storedThemeMode && ['light', 'dark', 'system'].includes(storedThemeMode)) {
+        return storedThemeMode as 'light' | 'dark' | 'system';
       }
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const legacyTheme = localStorage.getItem('theme');
+      if (legacyTheme) {
+        return legacyTheme === 'dark' ? 'dark' : 'light';
+      }
+      return 'system';
     } catch {
-      return false;
+      return 'system';
     }
   });
+
+  const [darkMode, setDarkMode] = useState(false);
 
   const [activeSection, setActiveSection] = useState('work');
   const [ripplePosition, setRipplePosition] = useState<{ x: number; y: number } | null>(null);
@@ -104,20 +110,97 @@ export default function App() {
     }
   };
 
-  // Track state changes to update document CSS nodes
+  // Synchronize themeMode, media query listener, and document CSS nodes
   useEffect(() => {
-    try {
-      if (darkMode) {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    const applyTheme = () => {
+      let isDark = false;
+      if (themeMode === 'system') {
+        isDark = mediaQuery.matches;
       } else {
-        document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
+        isDark = themeMode === 'dark';
       }
-    } catch (e) {
-      console.error("Local theme update error", e);
+      
+      setDarkMode(isDark);
+      
+      try {
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+          localStorage.setItem('theme', 'dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+          localStorage.setItem('theme', 'light');
+        }
+        localStorage.setItem('theme_mode', themeMode);
+      } catch (err) {
+        console.error("Local theme update error", err);
+      }
+    };
+
+    applyTheme();
+
+    if (themeMode === 'system') {
+      mediaQuery.addEventListener('change', applyTheme);
+      return () => {
+        mediaQuery.removeEventListener('change', applyTheme);
+      };
     }
-  }, [darkMode]);
+  }, [themeMode]);
+
+  // Add Global Keyboard Shortcuts (1-4 Section Navigation, D Theme Toggle, S Project Search)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore shortcut triggers if typing inside form inputs
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        activeEl.isContentEditable ||
+        activeEl.hasAttribute('contenteditable')
+      )) {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+
+      if (key === '1') {
+        e.preventDefault();
+        handleScrollToSection('work');
+      } else if (key === '2') {
+        e.preventDefault();
+        handleScrollToSection('skills');
+      } else if (key === '3') {
+        e.preventDefault();
+        handleScrollToSection('experience');
+      } else if (key === '4') {
+        e.preventDefault();
+        handleScrollToSection('contact');
+      } else if (key === 'd') {
+        e.preventDefault();
+        // Toggle theme modes dynamically
+        setThemeMode(prev => {
+          if (prev === 'system') {
+            const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            return isSystemDark ? 'light' : 'dark';
+          }
+          return prev === 'dark' ? 'light' : 'dark';
+        });
+      } else if (key === 's') {
+        e.preventDefault();
+        handleScrollToSection('work');
+        // Defer slightly to allow scroll transition start, then focus input
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('focus-project-search'));
+        }, 120);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [themeMode]);
 
   // Section Tracking Scroll Event Listener
   useEffect(() => {
@@ -273,7 +356,7 @@ SKILLS
     }
   };
 
-  const toggleDarkMode = (e?: ReactMouseEvent<HTMLElement> | MouseEvent) => {
+  const cycleThemeMode = (e?: ReactMouseEvent<HTMLElement> | MouseEvent) => {
     playNavTick();
     let clickX = window.innerWidth / 2;
     let clickY = window.innerHeight / 2;
@@ -285,7 +368,8 @@ SKILLS
       // Look up toggle buttons dynamically to center the ripple source if coords are not passed
       const btn = document.getElementById('theme-toggle-btn') || 
                   document.getElementById('mobile-theme-toggle-btn') || 
-                  document.querySelector('button[aria-label="Toggle theme mode"]');
+                  document.querySelector('button[aria-label="Toggle theme mode"]') ||
+                  document.getElementById('theme-toggle-capsule');
       if (btn) {
         const rect = btn.getBoundingClientRect();
         clickX = rect.left + rect.width / 2;
@@ -294,13 +378,31 @@ SKILLS
     }
 
     setRipplePosition({ x: clickX, y: clickY });
-    const nextDark = !darkMode;
-    setFaderColor(nextDark ? 'dark' : 'light');
+
+    // Cycle: system -> light -> dark -> system
+    let nextMode: 'light' | 'dark' | 'system' = 'light';
+    if (themeMode === 'system') {
+      nextMode = 'light';
+    } else if (themeMode === 'light') {
+      nextMode = 'dark';
+    } else {
+      nextMode = 'system';
+    }
+
+    // Determine target darkness for transitioning fader color
+    let nextIsDark = false;
+    if (nextMode === 'system') {
+      nextIsDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } else {
+      nextIsDark = nextMode === 'dark';
+    }
+
+    setFaderColor(nextIsDark ? 'dark' : 'light');
     setFaderActive(true);
     
     // Smooth timing orchestrator: wait 280ms for the expanding circle to cover the viewport fully
     setTimeout(() => {
-      setDarkMode(nextDark);
+      setThemeMode(nextMode);
       
       // Let it state flip instantly, then release the fader with standard timing
       setTimeout(() => {
@@ -466,7 +568,8 @@ SKILLS
       <Header
         profile={profile}
         darkMode={darkMode}
-        toggleDarkMode={toggleDarkMode}
+        themeMode={themeMode}
+        toggleThemeMode={cycleThemeMode}
         onScrollToSection={handleScrollToSection}
       />
 
@@ -501,23 +604,63 @@ SKILLS
                 </span>
               </button>
 
-              {/* Minimal Custom Slider Toggle */}
-              <button 
-                onClick={toggleDarkMode}
-                className="flex items-center gap-2 group cursor-pointer"
-                aria-label="Toggle visual contrast theme mode"
+              {/* Minimal Custom Three-Way Theme Switcher (Light | Dark | System) */}
+              <div 
+                id="theme-toggle-capsule"
+                className="flex items-center gap-1 p-0.5 rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-105/40 dark:bg-zinc-900/40 select-none"
               >
-                <div className={`w-10 h-5 rounded-full p-0.5 transition-colors relative border ${
-                  darkMode ? 'bg-zinc-800 border-zinc-700' : 'bg-zinc-100 border-zinc-200'
-                }`}>
-                  <div className={`w-3.5 h-3.5 bg-zinc-900 dark:bg-white rounded-full transition-transform duration-300 transform ${
-                    darkMode ? 'translate-x-5' : 'translate-x-0'
-                  }`} />
-                </div>
-                <span className="text-[10px] uppercase tracking-widest text-zinc-400 dark:text-zinc-500 font-mono select-none">
-                  {darkMode ? 'Dark' : 'Light'}
-                </span>
-              </button>
+                {(['light', 'dark', 'system'] as const).map((mode) => {
+                  const isActive = themeMode === mode;
+                  let Icon = Sun;
+                  let label = 'Light';
+                  if (mode === 'dark') {
+                    Icon = Moon;
+                    label = 'Dark';
+                  } else if (mode === 'system') {
+                    Icon = Monitor;
+                    label = 'System';
+                  }
+
+                  return (
+                    <button
+                      key={mode}
+                      onClick={(e) => {
+                        playNavTick();
+                        let clickX = e.clientX || window.innerWidth / 2;
+                        let clickY = e.clientY || window.innerHeight / 2;
+                        setRipplePosition({ x: clickX, y: clickY });
+
+                        let nextIsDark = false;
+                        if (mode === 'system') {
+                          nextIsDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                        } else {
+                          nextIsDark = mode === 'dark';
+                        }
+
+                        setFaderColor(nextIsDark ? 'dark' : 'light');
+                        setFaderActive(true);
+
+                        setTimeout(() => {
+                          setThemeMode(mode);
+                          setTimeout(() => {
+                            setFaderActive(false);
+                          }, 250);
+                        }, 280);
+                      }}
+                      className={`relative px-2.5 py-1 rounded-full transition-all text-[9px] font-mono uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer select-none outline-none ${
+                        isActive
+                          ? 'bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-950 shadow-xs'
+                          : 'text-zinc-400 hover:text-zinc-650 dark:text-zinc-500 dark:hover:text-zinc-300'
+                      }`}
+                      title={`${label} Mode`}
+                      aria-label={`Switch theme to ${label}`}
+                    >
+                      <Icon size={10} />
+                      <span className="hidden sm:inline font-semibold">{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 

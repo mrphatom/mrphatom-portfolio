@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sun, Moon, Menu, X } from 'lucide-react';
+import { Sun, Moon, Menu, X, Monitor } from 'lucide-react';
 import { Profile } from '../types';
 import { playSoftClick, playNavTick } from '../utils/audio';
 
 interface HeaderProps {
   profile: Profile;
   darkMode: boolean;
-  toggleDarkMode: () => void;
+  themeMode: 'light' | 'dark' | 'system';
+  toggleThemeMode: () => void;
   onScrollToSection?: (id: string) => void;
 }
 
-export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSection }: HeaderProps) {
+export default function Header({ profile, darkMode, themeMode, toggleThemeMode, onScrollToSection }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
@@ -124,14 +125,20 @@ export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSe
           {/* Theme Switcher Button */}
           <motion.button
             id="theme-toggle-btn"
-            onClick={toggleDarkMode}
+            onClick={toggleThemeMode}
             onMouseEnter={playSoftClick}
             className="p-2 rounded-full border border-zinc-200/50 dark:border-zinc-800/50 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-colors cursor-pointer"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             aria-label="Toggle theme mode"
           >
-            {darkMode ? <Sun size={15} /> : <Moon size={15} />}
+            {themeMode === 'system' ? (
+              <Monitor size={15} />
+            ) : darkMode ? (
+              <Sun size={15} />
+            ) : (
+              <Moon size={15} />
+            )}
           </motion.button>
         </nav>
 
@@ -140,12 +147,18 @@ export default function Header({ profile, darkMode, toggleDarkMode, onScrollToSe
           {/* Theme Switcher Button Mobile */}
           <button
             id="mobile-theme-toggle-btn"
-            onClick={toggleDarkMode}
+            onClick={toggleThemeMode}
             onMouseEnter={playSoftClick}
             className="p-2 rounded-full border border-zinc-200/50 dark:border-zinc-800/50 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100/50 dark:hover:bg-zinc-900/50 transition-colors cursor-pointer"
             aria-label="Toggle theme mode"
           >
-            {darkMode ? <Sun size={15} /> : <Moon size={15} />}
+            {themeMode === 'system' ? (
+              <Monitor size={15} />
+            ) : darkMode ? (
+              <Sun size={15} />
+            ) : (
+              <Moon size={15} />
+            )}
           </button>
 
           <button
