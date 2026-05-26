@@ -618,7 +618,7 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
                     Download Professional Resume?
                   </h5>
                   <p className="text-[11px] font-medium text-zinc-400 mt-1 leading-normal">
-                    Save <span className="text-zinc-200 underline decoration-zinc-500 underline-offset-2">Godtime_Benson_Resume.txt</span> locally (2.1 KB).
+                    Save <span className="text-zinc-200 underline decoration-zinc-500 underline-offset-2">Godtime_Benson_Resume.pdf</span> locally (14.5 KB).
                   </p>
                 </div>
               </div>

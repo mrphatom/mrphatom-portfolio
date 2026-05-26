@@ -13,6 +13,7 @@ import { Mail, MapPin, Download, WifiOff, RefreshCw, AlertCircle, Sun, Moon, Mon
 import { playSoftClick, playNavTick, setGlobalMute } from './utils/audio';
 import { triggerHaptic } from './utils/haptics';
 import ThreeDBackground from './components/ThreeDBackground';
+import { jsPDF } from 'jspdf';
 
 export default function App() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
@@ -157,7 +158,7 @@ export default function App() {
           setIsland({
             type: 'glance',
             projectName: 'resume',
-            targetName: 'Godtime_Benson_Resume.txt'
+            targetName: 'Godtime_Benson_Resume.pdf'
           });
         } else if (href && href !== '#' && !href.startsWith('mailto:') && !href.startsWith('tel:')) {
           let siteName = target.getAttribute('aria-label') || target.getAttribute('title') || 'Website';
@@ -607,65 +608,158 @@ export default function App() {
 
   const executeActualResumeDownload = () => {
     if (profile.resumeUrl === '#' || !profile.resumeUrl) {
-      const resumeContent = `==================================================
-GODTIME BENSON
-Senior Frontend Engineer & AI Specialist / Evaluator
-Lagos, Nigeria (GMT+1) | godtimebenson09@gmail.com
-==================================================
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
 
-SUMMARY
-Senior Frontend Engineer specializing in bridging the gap between sophisticated aesthetics and high-performance frontend engineering.
-Expertise in interactive web architectures, React, TypeScript, Tailwind CSS, Framer Motion, and Large Language Model (LLM) evaluations.
+      // Colors and Styles (Slate and Royal Palette)
+      const primaryColor = [15, 23, 42];    // Slate-900 (Deep Charcoal)
+      const secondaryColor = [71, 85, 105];  // Slate-600 (Muted Body)
+      const accentColor = [37, 99, 235];     // Blue-600
+      const lightBg = [248, 250, 252];       // Slate-50
 
-EXPERIENCE
-AI Specialist / Evaluator
-Mercor (Apr 2026 - Present)
-- Evaluating, training, aligning, and building state-of-the-art AI agents and Large Language Models for complex reasoning capabilities.
-- Spearheaded LLM alignment strategies and custom evaluation benchmarks to validate multi-step reasoning capabilities.
-- Collaborated closely on complex prompt architectures and Reinforcement Learning from Human Feedback (RLHF) guidelines.
-- Engineered custom playground interfaces and high-performance evaluation tools to streamline fine-tuning cycles.
+      // 1. Header Frame
+      doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.rect(0, 0, 210, 48, 'F');
 
-Lead Software Engineer
-Apex Systems (Sept 2024 - Apr 2026)
-- Built high-performance component frameworks and automated layout benchmarks.
+      // 2. Personal Title
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(26);
+      doc.text('GODTIME BENSON', 18, 18);
 
-Loomis Visuals - Frontend Developer
-(Feb 2022 - Aug 2024)
-- Designed creative layout solutions and highly custom graphics integrations.
+      // Subtitle
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      doc.setTextColor(191, 219, 254); // Light blue
+      doc.text('Senior Frontend Engineer & Design Systems Architect', 18, 25);
 
-TOP PROJECTS
-1. LeadsRadar Workspace
-   An outreach tracking workspace and geolocation lead discovering engine designed specifically for freelance developers.
-   Tech: React, TypeScript, Tailwind CSS, Kanban API, Geographic Mapping
-   URL: https://github.com/mrphatom/LeadsRadar
+      // Contact Row
+      doc.setFontSize(8.5);
+      doc.setTextColor(226, 232, 240);
+      doc.text('Lagos, Nigeria (GMT+1)   |   godtimebenson09@gmail.com   |   github.com/mrphatom', 18, 35);
 
-2. AskZen Telegram Bot
-   A production-grade AI-powered Telegram chatbot integrating premium paywalls via Telegram Stars.
-   Tech: TypeScript, Node.js, Groq API, Telegram API, Railway CRM
-   URL: https://github.com/mrphatom/AskZen
+      let y = 62;
 
-3. ChatGPT Multi-Turn Interface
-   A lightweight, secure chatbot workspace featuring full thread context preservation.
-   Tech: React, Vite, OpenAI APIs, Tailwind CSS, LocalState
-   URL: https://github.com/mrphatom/chatgpt3
+      const addSectionHeader = (title: string) => {
+        // Section dividing line
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.4);
+        doc.line(18, y - 2, 192, y - 2);
 
-SKILLS
-- Frontend: React, TypeScript, Framer Motion, Next.js, CSS/CSS Grid, Tailwind CSS
-- Design: UI/UX Design, Figma Mapping, Motion Choreography
-- Utilities: Blockchain Engineering, Node.js, GraphQL/REST, Git & CI/CD
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(title.toUpperCase(), 18, y + 4);
+        y += 12;
+      };
 
-==================================================
-`;
+      // Summary
+      addSectionHeader('Summary');
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      const summaryText = 'Senior Frontend Engineer specializing in bridging the gap between sophisticated aesthetics and high-performance frontend engineering. Expertise in interactive web architectures, React, TypeScript, Tailwind CSS, Framer Motion, and Large Language Model (LLM) evaluations.';
+      const splitSummary = doc.splitTextToSize(summaryText, 174);
+      doc.text(splitSummary, 18, y);
+      y += (splitSummary.length * 4.8) + 8;
 
-      const blob = new Blob([resumeContent], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Godtime_Benson_Resume.txt`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // Experience
+      addSectionHeader('Experience');
+
+      const addJob = (role: string, company: string, period: string, bullets: string[]) => {
+        if (y > 245) {
+          doc.addPage();
+          y = 20;
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(role, 18, y);
+        
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(9.5);
+        doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
+        doc.text(`${company}  (${period})`, 18, y + 4.5);
+        y += 9;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9.5);
+        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+        
+        bullets.forEach((bullet) => {
+          if (y > 270) {
+            doc.addPage();
+            y = 20;
+          }
+          doc.text('•', 21, y);
+          const splitBullet = doc.splitTextToSize(bullet, 166);
+          doc.text(splitBullet, 25, y);
+          y += (splitBullet.length * 4.5) + 1.2;
+        });
+        y += 4;
+      };
+
+      addJob(
+        'AI Specialist / Evaluator',
+        'Mercor',
+        'Apr 2026 - Present',
+        [
+          'Evaluating, training, aligning, and building state-of-the-art AI agents and Large Language Models for complex reasoning capabilities.',
+          'Spearheaded LLM alignment strategies and custom evaluation benchmarks to validate multi-step reasoning capabilities.',
+          'Collaborated closely on complex prompt architectures and Reinforcement Learning from Human Feedback (RLHF) guidelines.',
+          'Engineered custom playground interfaces and high-performance evaluation tools to streamline fine-tuning cycles.'
+        ]
+      );
+
+      addJob(
+        'Lead Software Engineer',
+        'Apex Systems',
+        'Sept 2024 - Apr 2026',
+        [
+          'Built high-performance component frameworks and automated layout benchmarks.',
+          'Orchestrated smooth dynamic interfaces and customized microinteractions.',
+          'Designed complex visual configurations and customized analytical dashboards.'
+        ]
+      );
+
+      addJob(
+        'Loomis Visuals - Frontend Developer',
+        'Loomis Visuals',
+        'Feb 2022 - Aug 2024',
+        [
+          'Designed creative layout solutions and highly custom graphics integrations.',
+          'Developed smooth web experiences utilizing modern CSS, TypeScript, and Framer Motion animation loops.'
+        ]
+      );
+
+      // Skills Section
+      addSectionHeader('Technical Skills');
+      
+      const skillsLeft = [
+        'Frontend: React, TypeScript, Framer Motion, Next.js, CSS/CSS Grid, Tailwind CSS',
+        'Design: UI/UX Design, Figma Mapping, Design Systems, Motion Dynamics',
+        'Utilities: Blockchain Engineering, Node.js, GraphQL/REST, Git & CI/CD Pipelines'
+      ];
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
+      
+      skillsLeft.forEach((skill) => {
+        if (y > 275) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.text('•', 21, y);
+        doc.text(skill, 25, y);
+        y += 5.5;
+      });
+
+      doc.save('Godtime_Benson_Resume.pdf');
     } else {
       // In case they configured a real link
       window.open(profile.resumeUrl, '_blank', 'noopener,noreferrer');
@@ -1038,7 +1132,7 @@ SKILLS
                 id="hero-resume-download-btn"
                 href={profile.resumeUrl}
                 onClick={handleDownloadResume}
-                download="Godtime_Benson_Resume.txt"
+                download="Godtime_Benson_Resume.pdf"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-mono font-bold tracking-wider uppercase bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:hover:bg-zinc-200 dark:text-zinc-950 transition-colors shadow-xs select-none cursor-pointer border border-zinc-900 dark:border-zinc-50"
