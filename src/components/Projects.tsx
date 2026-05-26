@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, MouseEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ExternalLink, Code, FolderOpen, X, ArrowUpRight } from 'lucide-react';
 import { Project } from '../types';
@@ -13,6 +13,25 @@ export default function Projects({ projects }: ProjectsProps) {
   const [selectedTag, setSelectedTag] = useState('All');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Universal handler to intercept external navigation and pass to Dynamic Island
+  const handleExternalRedirect = (e: MouseEvent<HTMLAnchorElement>, url: string, projectName: string) => {
+    e.preventDefault();
+    window.dispatchEvent(new CustomEvent('trigger-redirect-island', {
+      detail: { url, name: projectName }
+    }));
+  };
+
+  const handleGlanceStart = (type: 'repo' | 'demo', url?: string, name?: string) => {
+    window.dispatchEvent(new CustomEvent('trigger-glance-island', {
+      detail: { type, url, name }
+    }));
+  };
+
+  const handleGlanceEnd = () => {
+    window.dispatchEvent(new CustomEvent('trigger-glance-end-island'));
+  };
+
 
   // Dynamic Document Title Custom Synchronization
   useEffect(() => {
@@ -218,29 +237,31 @@ export default function Projects({ projects }: ProjectsProps) {
                           Read Specs
                         </button>
 
-                        <div className="flex gap-4">
-                          {project.codeUrl && (
+                         <div className="flex gap-4">
+                           {project.codeUrl && (
                             <a
                               href={project.codeUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors cursor-pointer flex items-center gap-1"
+                              onClick={(e) => handleExternalRedirect(e, project.codeUrl, project.title)}
+                              onMouseEnter={() => handleGlanceStart('repo', project.codeUrl, project.title)}
+                              onMouseLeave={handleGlanceEnd}
+                              className="text-zinc-500 hover:text-zinc-805 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors cursor-pointer flex items-center gap-1"
                               aria-label="GitHub Repository Link"
                             >
                               <Code size={14} /> Repository
                             </a>
-                          )}
-                          {project.demoUrl && (
+                           )}
+                           {project.demoUrl && (
                             <a
                               href={project.demoUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors cursor-pointer flex items-center gap-1.5 font-medium group/link"
+                              onClick={(e) => handleExternalRedirect(e, project.demoUrl, project.title)}
+                              onMouseEnter={() => handleGlanceStart('demo', project.demoUrl, project.title)}
+                              onMouseLeave={handleGlanceEnd}
+                              className="text-zinc-500 hover:text-zinc-805 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors cursor-pointer flex items-center gap-1.5 font-medium group/link"
                               aria-label="Live Demo Link"
                             >
                               Live App <ArrowUpRight size={14} className="group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform" />
                             </a>
-                          )}
+                           )}
                         </div>
                       </div>
                     </div>
@@ -319,31 +340,33 @@ export default function Projects({ projects }: ProjectsProps) {
                     </div>
                   </div>
 
-                  {/* CTA Redirection */}
-                  <div className="flex gap-4 border-t border-zinc-100 dark:border-zinc-800 pt-6">
-                    {activeProject.demoUrl && (
-                      <a
-                        href={activeProject.demoUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-950 hover:bg-zinc-855 dark:hover:bg-zinc-150 py-2.5 px-5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                      >
-                        Launch Application
-                        <ExternalLink size={14} />
-                      </a>
-                    )}
-                    {activeProject.codeUrl && (
-                      <a
-                        href={activeProject.codeUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 bg-transparent border border-zinc-200 text-zinc-800 dark:border-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-900 py-2.5 px-5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                      >
-                        Code Repository
-                        <Code size={14} />
-                      </a>
-                    )}
-                  </div>
+                   {/* CTA Redirection */}
+                   <div className="flex gap-4 border-t border-zinc-100 dark:border-zinc-800 pt-6">
+                     {activeProject.demoUrl && (
+                       <a
+                         href={activeProject.demoUrl}
+                         onClick={(e) => handleExternalRedirect(e, activeProject.demoUrl!, activeProject.title)}
+                         onMouseEnter={() => handleGlanceStart('demo', activeProject.demoUrl, activeProject.title)}
+                         onMouseLeave={handleGlanceEnd}
+                         className="inline-flex items-center gap-1.5 bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-950 hover:bg-zinc-855 dark:hover:bg-zinc-150 py-2.5 px-5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                       >
+                         Launch Application
+                         <ExternalLink size={14} />
+                       </a>
+                     )}
+                     {activeProject.codeUrl && (
+                       <a
+                         href={activeProject.codeUrl}
+                         onClick={(e) => handleExternalRedirect(e, activeProject.codeUrl!, activeProject.title)}
+                         onMouseEnter={() => handleGlanceStart('repo', activeProject.codeUrl, activeProject.title)}
+                         onMouseLeave={handleGlanceEnd}
+                         className="inline-flex items-center gap-1.5 bg-transparent border border-zinc-205 dark:border-zinc-805 dark:text-zinc-205 hover:bg-zinc-105 dark:hover:bg-zinc-905 py-2.5 px-5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                       >
+                         Code Repository
+                         <Code size={14} />
+                       </a>
+                     )}
+                   </div>
                 </div>
               </motion.div>
             </motion.div>

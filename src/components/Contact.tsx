@@ -544,19 +544,19 @@ export default function Contact({ profile }: ContactProps) {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.98, y: 12 }}
                 transition={{ duration: 0.3 }}
-                className="col-span-12 bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4 sm:p-6 md:p-8 shadow-md"
+                className="col-span-12 w-full min-w-0 overflow-hidden bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 p-3 sm:p-6 md:p-8 shadow-md"
               >
                 {/* Inbox dashboard top details */}
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800/80 pb-5 mb-6">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg text-blue-500 shrink-0">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-100 dark:border-zinc-800/80 pb-5 mb-6 w-full min-w-0 overflow-hidden">
+                  <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                    <div className="p-2 bg-blue-50 dark:bg-blue-950/20 rounded-lg text-blue-500 shrink-0 mt-0.5">
                       <ShieldCheck size={18} />
                     </div>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <h4 className="text-md font-semibold text-zinc-900 dark:text-zinc-50 flex items-center gap-1.5 font-display flex-wrap">
                         Leads Inbox Hub <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 uppercase">Local Hub</span>
                       </h4>
-                      <p className="text-xs text-zinc-550 dark:text-zinc-400 font-light leading-relaxed">Manage or inspect leads submitted in this local session browser.</p>
+                      <p className="text-xs text-zinc-550 dark:text-zinc-400 font-light leading-relaxed break-words">Manage or inspect leads submitted in this local session browser.</p>
                     </div>
                   </div>
 
@@ -710,10 +710,10 @@ export default function Contact({ profile }: ContactProps) {
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6 items-start w-full min-w-0 overflow-hidden">
                     
                     {/* Left Column: Inbox List */}
-                    <div className={`md:col-span-4 flex-col gap-2 md:border-r border-zinc-200/50 dark:border-zinc-800/50 pr-2 max-h-[420px] overflow-y-auto ${
+                    <div className={`md:col-span-4 w-full min-w-0 flex-col gap-2 md:border-r border-zinc-200/50 dark:border-zinc-800/50 md:pr-4 pr-1 max-h-[420px] overflow-y-auto ${
                       activeMessageId !== null ? 'hidden md:flex' : 'flex'
                     }`}>
                       <div className="relative mb-2">
@@ -768,7 +768,7 @@ export default function Contact({ profile }: ContactProps) {
                     </div>
 
                     {/* Right Column: Detailed Reader pane */}
-                    <div className={`md:col-span-8 bg-zinc-50 dark:bg-zinc-950/40 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 p-4 sm:p-5 md:p-6 min-h-[300px] flex-col justify-between ${
+                    <div className={`md:col-span-8 w-full min-w-0 overflow-hidden bg-zinc-50 dark:bg-zinc-950/40 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 p-3 sm:p-5 md:p-6 min-h-[300px] flex-col justify-between ${
                       activeMessageId === null ? 'hidden md:flex' : 'flex'
                     }`}>
                       {activeMessageId ? (

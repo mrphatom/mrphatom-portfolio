@@ -1,4 +1,4 @@
-import { useState, useEffect, MouseEvent as ReactMouseEvent } from 'react';
+import { useState, useEffect, MouseEvent as ReactMouseEvent, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { portfolioData } from './data';
 import Header from './components/Header';
@@ -7,6 +7,7 @@ import Skills from './components/Skills';
 import ExperienceSection from './components/Experience';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
+import DynamicIsland from './components/DynamicIsland';
 import { Mail, MapPin, Download, WifiOff, RefreshCw, AlertCircle, Sun, Moon, Monitor } from 'lucide-react';
 import { playSoftClick, playNavTick, setGlobalMute } from './utils/audio';
 import ThreeDBackground from './components/ThreeDBackground';
@@ -29,6 +30,100 @@ export default function App() {
   });
 
   const [darkMode, setDarkMode] = useState(false);
+
+  const [island, setIsland] = useState<{
+    type: 'none' | 'theme' | 'redirect_prompt' | 'download_resume_prompt' | 'glance' | 'time_spent';
+    themeMode?: 'light' | 'dark' | 'system';
+    redirectUrl?: string;
+    projectName?: string;
+    minutesSpent?: number;
+  }>({ type: 'none' });
+
+  // Handle Dynamic Island custom redirect and glance trigger events
+  useEffect(() => {
+    const handleTriggerIsland = (e: CustomEvent<{ url: string; name: string }>) => {
+      setIsland({
+        type: 'redirect_prompt',
+        redirectUrl: e.detail.url,
+        projectName: e.detail.name
+      });
+    };
+
+    const handleGlanceIsland = (e: CustomEvent<{ type: 'repo' | 'demo' | 'social'; url?: string; name?: string }>) => {
+      setIsland(prev => {
+        if (prev.type === 'none' || prev.type === 'glance') {
+          return {
+            type: 'glance',
+            projectName: e.detail.type,
+            redirectUrl: e.detail.url,
+            targetName: e.detail.name
+          };
+        }
+        return prev;
+      });
+    };
+
+    const handleGlanceEndIsland = () => {
+      setIsland(prev => {
+        if (prev.type === 'glance') {
+          return { type: 'none' };
+        }
+        return prev;
+      });
+    };
+
+    window.addEventListener('trigger-redirect-island' as any, handleTriggerIsland as any);
+    window.addEventListener('trigger-glance-island' as any, handleGlanceIsland as any);
+    window.addEventListener('trigger-glance-end-island' as any, handleGlanceEndIsland as any);
+
+    return () => {
+      window.removeEventListener('trigger-redirect-island' as any, handleTriggerIsland as any);
+      window.removeEventListener('trigger-glance-island' as any, handleGlanceIsland as any);
+      window.removeEventListener('trigger-glance-end-island' as any, handleGlanceEndIsland as any);
+    };
+  }, []);
+
+  // Double-progression page time feedback tracker (5 mins -> 10 mins -> 20 mins -> 40 mins -> etc.)
+  useEffect(() => {
+    const startTimeStamp = Date.now();
+    const nextTriggerMinutes = { current: 5 }; // starts at 5 minutes
+
+    const checkInterval = setInterval(() => {
+      const elapsedMs = Date.now() - startTimeStamp;
+      const elapsedMinutes = elapsedMs / (60 * 1000);
+
+      if (elapsedMinutes >= nextTriggerMinutes.current) {
+        setIsland({
+          type: 'time_spent',
+          minutesSpent: nextTriggerMinutes.current
+        });
+        
+        // Double the interval for the next trigger
+        nextTriggerMinutes.current = nextTriggerMinutes.current * 2;
+      }
+    }, 5000); // Check every 5 seconds for precise, lightweight timing
+
+    return () => clearInterval(checkInterval);
+  }, []);
+
+  const isMountedTheme = useRef(false);
+  useEffect(() => {
+    if (!isMountedTheme.current) {
+      isMountedTheme.current = true;
+      return;
+    }
+
+    setIsland({
+      type: 'theme',
+      themeMode: themeMode
+    });
+
+    const timer = setTimeout(() => {
+      setIsland(prev => prev.type === 'theme' ? { type: 'none' } : prev);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [themeMode]);
 
   const [activeSection, setActiveSection] = useState('work');
   const [ripplePosition, setRipplePosition] = useState<{ x: number; y: number } | null>(null);
@@ -291,9 +386,14 @@ export default function App() {
   const [faderColor, setFaderColor] = useState<'light' | 'dark'>('dark');
 
   const handleDownloadResume = (e: ReactMouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    setIsland({
+      type: 'download_resume_prompt'
+    });
+  };
+
+  const executeActualResumeDownload = () => {
     if (profile.resumeUrl === '#' || !profile.resumeUrl) {
-      e.preventDefault();
-      
       const resumeContent = `==================================================
 GODTIME BENSON
 Senior Frontend Engineer & AI Specialist / Evaluator
@@ -353,6 +453,9 @@ SKILLS
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+    } else {
+      // In case they configured a real link
+      window.open(profile.resumeUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -455,6 +558,23 @@ SKILLS
   };
 
   const profile = portfolioData.profile;
+
+  const handleSocialRedirect = (e: ReactMouseEvent<HTMLAnchorElement>, url: string, label: string) => {
+    e.preventDefault();
+    window.dispatchEvent(new CustomEvent('trigger-redirect-island', {
+      detail: { url, name: label }
+    }));
+  };
+
+  const handleSocialGlanceStart = (url?: string, name?: string) => {
+    window.dispatchEvent(new CustomEvent('trigger-glance-island', {
+      detail: { type: 'social', url, name }
+    }));
+  };
+
+  const handleSocialGlanceEnd = () => {
+    window.dispatchEvent(new CustomEvent('trigger-glance-end-island'));
+  };
 
   return (
     <div className="w-screen min-h-screen bg-zinc-100/40 dark:bg-[#060606] text-zinc-800 dark:text-zinc-100 selection:bg-zinc-200 dark:selection:bg-zinc-800 selection:text-zinc-900 transition-colors duration-300 md:p-3 lg:p-4 xl:p-6 overflow-x-hidden lg:h-screen lg:overflow-hidden flex items-center justify-center">
@@ -771,11 +891,14 @@ SKILLS
             </div>
 
             {/* Inline uppercase monochrome social anchors */}
-            <nav className="flex flex-wrap gap-x-5 gap-y-2 text-[10px] font-mono text-zinc-400 dark:text-zinc-500 uppercase tracking-widest">
+            <nav className="flex flex-wrap gap-x-5 gap-y-2 text-[10px] font-mono text-zinc-400 dark:text-zinc-500 uppercase tracking-widest block mb-1">
               {profile.socialLinks.filter(l => l.platform !== 'email').map((link) => (
                 <a 
                   key={link.platform} 
                   href={link.url}
+                  onClick={(e) => handleSocialRedirect(e, link.url, link.label)}
+                  onMouseEnter={() => handleSocialGlanceStart(link.url, link.label)}
+                  onMouseLeave={handleSocialGlanceEnd}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
@@ -785,6 +908,9 @@ SKILLS
               ))}
               <a 
                 href={`mailto:${profile.email}`}
+                onClick={(e) => handleSocialRedirect(e, `mailto:${profile.email}`, 'Email Client')}
+                onMouseEnter={() => handleSocialGlanceStart(`mailto:${profile.email}`, 'Email Client')}
+                onMouseLeave={handleSocialGlanceEnd}
                 className="hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
               >
                 <Mail size={10} /> Email
@@ -849,6 +975,17 @@ SKILLS
               className={faderColor === 'dark' ? 'bg-[#060606]' : 'bg-zinc-100'}
             />
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* High-fidelity Apple style Dynamic Island bottom helper */}
+      <AnimatePresence>
+        {island.type !== 'none' && (
+          <DynamicIsland 
+            island={island} 
+            onClose={() => setIsland({ type: 'none' })} 
+            onResumeConfirm={executeActualResumeDownload}
+          />
         )}
       </AnimatePresence>
 

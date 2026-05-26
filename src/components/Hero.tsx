@@ -145,6 +145,20 @@ export default function Hero({ profile }: HeroProps) {
                 <motion.a
                   key={link.platform}
                   href={link.url}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.dispatchEvent(new CustomEvent('trigger-redirect-island', {
+                      detail: { url: link.url, name: link.platform === 'email' ? 'Email Client' : link.label }
+                    }));
+                  }}
+                  onMouseEnter={() => {
+                    window.dispatchEvent(new CustomEvent('trigger-glance-island', {
+                      detail: { type: 'social', url: link.url, name: link.platform === 'email' ? 'Email Client' : link.label }
+                    }));
+                  }}
+                  onMouseLeave={() => {
+                    window.dispatchEvent(new CustomEvent('trigger-glance-end-island'));
+                  }}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-2.5 rounded-full border border-zinc-200/80 dark:border-zinc-805 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-white dark:hover:bg-zinc-900 hover:shadow-xs transition-all cursor-pointer"
