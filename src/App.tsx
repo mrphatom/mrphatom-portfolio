@@ -8,6 +8,7 @@ import ExperienceSection from './components/Experience';
 import Contact from './components/Contact';
 import Footer from './components/Footer';
 import DynamicIsland from './components/DynamicIsland';
+import NotFound from './components/NotFound';
 import { Mail, MapPin, Download, WifiOff, RefreshCw, AlertCircle, Sun, Moon, Monitor } from 'lucide-react';
 import { playSoftClick, playNavTick, setGlobalMute } from './utils/audio';
 import ThreeDBackground from './components/ThreeDBackground';
@@ -30,6 +31,29 @@ export default function App() {
   });
 
   const [darkMode, setDarkMode] = useState(false);
+
+  const [isNotFound, setIsNotFound] = useState(() => {
+    try {
+      const path = window.location.pathname;
+      return path !== '/' && path !== '/index.html' && path !== '';
+    } catch {
+      return false;
+    }
+  });
+
+  // Track popstate event back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const path = window.location.pathname;
+        setIsNotFound(path !== '/' && path !== '/index.html' && path !== '');
+      } catch {
+        setIsNotFound(false);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const [island, setIsland] = useState<{
     type: 'none' | 'theme' | 'redirect_prompt' | 'download_resume_prompt' | 'glance' | 'time_spent';
@@ -72,14 +96,30 @@ export default function App() {
       });
     };
 
+    const handleContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.closest('a') ||
+          target.closest('button') ||
+          target.closest('[role="button"]') ||
+          target.closest('img') ||
+          target.closest('.pointer-events-auto'))
+      ) {
+        e.preventDefault();
+      }
+    };
+
     window.addEventListener('trigger-redirect-island' as any, handleTriggerIsland as any);
     window.addEventListener('trigger-glance-island' as any, handleGlanceIsland as any);
     window.addEventListener('trigger-glance-end-island' as any, handleGlanceEndIsland as any);
+    document.addEventListener('contextmenu', handleContextMenu);
 
     return () => {
       window.removeEventListener('trigger-redirect-island' as any, handleTriggerIsland as any);
       window.removeEventListener('trigger-glance-island' as any, handleGlanceIsland as any);
       window.removeEventListener('trigger-glance-end-island' as any, handleGlanceEndIsland as any);
+      document.removeEventListener('contextmenu', handleContextMenu);
     };
   }, []);
 
@@ -696,8 +736,18 @@ SKILLS
       {/* Main Structural Layout Border Card Frame */}
       <div className="flex flex-col lg:flex-row w-full h-auto lg:h-full border border-zinc-200/50 dark:border-zinc-850/80 md:rounded-2xl lg:overflow-hidden bg-white/75 dark:bg-[#0e0e0e]/75 backdrop-blur-md shadow-xs lg:max-h-full z-10">
         
-        {/* LEFT STICKY SIDEBAR (Intro & Identity Block) */}
-        <aside className="w-full lg:w-[40%] xl:w-[38%] border-b lg:border-b-0 lg:border-r border-zinc-200/50 dark:border-zinc-850/80 pt-24 pb-6 px-6 sm:pt-28 sm:pb-10 sm:px-10 lg:p-12 flex flex-col justify-between h-auto lg:h-full overflow-visible lg:overflow-y-auto shrink-0 bg-white/40 dark:bg-[#0a0a0a]/40 backdrop-blur-md">
+        {isNotFound ? (
+          <NotFound 
+            darkMode={darkMode}
+            onGoHome={() => {
+              setIsNotFound(false);
+              window.history.pushState({}, '', '/');
+            }}
+          />
+        ) : (
+          <>
+            {/* LEFT STICKY SIDEBAR (Intro & Identity Block) */}
+            <aside className="w-full lg:w-[40%] xl:w-[38%] border-b lg:border-b-0 lg:border-r border-zinc-200/50 dark:border-zinc-850/80 pt-24 pb-6 px-6 sm:pt-28 sm:pb-10 sm:px-10 lg:p-12 flex flex-col justify-between h-auto lg:h-full overflow-visible lg:overflow-y-auto shrink-0 bg-white/40 dark:bg-[#0a0a0a]/40 backdrop-blur-md">
           
           {/* Header row (Brand Logo & Switches) - Hidden on mobile/tablet to avoid duplicate clashing elements */}
           <div className="hidden lg:flex justify-between items-center mb-10 select-none">
@@ -944,6 +994,8 @@ SKILLS
           <Footer profile={profile} />
 
         </main>
+        </>
+        )}
       </div>
 
       {/* Modern circular reveal ripple animation overlay */}
