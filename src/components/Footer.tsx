@@ -24,8 +24,15 @@ export default function Footer({ profile }: FooterProps) {
         
         {/* Core copyright */}
         <div className="text-center md:text-left select-none">
-          <p className="text-xs text-zinc-550 font-mono">
-            &copy; {currentYear} {profile.name} {profile.sirName}. Independent Web Engineer.
+          <p className="text-xs text-zinc-500 font-mono flex items-center justify-center md:justify-start gap-2 flex-wrap">
+            <span>&copy; {currentYear} {profile.name} {profile.sirName}. Independent Web Engineer.</span>
+            <span className="text-zinc-300 dark:text-zinc-800 hidden sm:inline">|</span>
+            <button 
+              onClick={() => window.location.pathname = '/admin'} 
+              className="hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors pointer-events-auto underline decoration-dotted underline-offset-2 cursor-pointer text-zinc-400"
+            >
+              Console Gateway
+            </button>
           </p>
         </div>
 

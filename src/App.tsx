@@ -9,6 +9,8 @@ import Contact from './components/Contact';
 import Footer from './components/Footer';
 import DynamicIsland from './components/DynamicIsland';
 import NotFound from './components/NotFound';
+import AdminPanel from './components/AdminPanel';
+import { PortfolioData } from './types';
 import { Mail, MapPin, Download, WifiOff, RefreshCw, AlertCircle, Sun, Moon, Monitor } from 'lucide-react';
 import { playSoftClick, playNavTick, setGlobalMute } from './utils/audio';
 import { triggerHaptic } from './utils/haptics';
@@ -34,23 +36,56 @@ export default function App() {
 
   const [darkMode, setDarkMode] = useState(false);
 
+  // Loaded portfolio editable dataset
+  const [editableData, setEditableData] = useState<PortfolioData>(() => {
+    try {
+      const stored = localStorage.getItem('portfolio_data');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error('Failed to parse portfolio_data:', e);
+    }
+    return portfolioData;
+  });
+
   const [isNotFound, setIsNotFound] = useState(() => {
     try {
       const path = window.location.pathname;
-      return path !== '/' && path !== '/index.html' && path !== '';
+      return path !== '/' && path !== '/index.html' && path !== '' && path !== '/admin';
     } catch {
       return false;
     }
   });
+
+  const [isAdminView, setIsAdminView] = useState(() => {
+    try {
+      return window.location.pathname === '/admin';
+    } catch {
+      return false;
+    }
+  });
+
+  const navigateTo = (path: string) => {
+    try {
+      window.history.pushState({}, '', path);
+      setIsNotFound(path !== '/' && path !== '/index.html' && path !== '' && path !== '/admin');
+      setIsAdminView(path === '/admin');
+    } catch (e) {
+      console.error('Navigation error:', e);
+    }
+  };
 
   // Track popstate event back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
       try {
         const path = window.location.pathname;
-        setIsNotFound(path !== '/' && path !== '/index.html' && path !== '');
+        setIsNotFound(path !== '/' && path !== '/index.html' && path !== '' && path !== '/admin');
+        setIsAdminView(path === '/admin');
       } catch {
         setIsNotFound(false);
+        setIsAdminView(false);
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -617,146 +652,417 @@ export default function App() {
       // Colors and Styles (Slate and Royal Palette)
       const primaryColor = [15, 23, 42];    // Slate-900 (Deep Charcoal)
       const secondaryColor = [71, 85, 105];  // Slate-600 (Muted Body)
-      const accentColor = [37, 99, 235];     // Blue-600
-      const lightBg = [248, 250, 252];       // Slate-50
+      const accentColor = [29, 78, 216];     // Royal Blue `#1d4ed8`
+      const bodyColor = [30, 41, 59];       // Slate-800
 
       // 1. Header Frame
       doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-      doc.rect(0, 0, 210, 48, 'F');
+      doc.rect(0, 0, 210, 45, 'F');
 
       // 2. Personal Title
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(26);
-      doc.text('GODTIME BENSON', 18, 18);
+      doc.setFontSize(24);
+      doc.text('Godtime Benson', 18, 16);
 
       // Subtitle
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(11);
-      doc.setTextColor(191, 219, 254); // Light blue
-      doc.text('Senior Frontend Engineer & Design Systems Architect', 18, 25);
+      doc.setFontSize(9);
+      doc.setTextColor(226, 232, 240); // Light blue-grey
+      const subtitleText = 'Research-Oriented Computer Scientist | AI/ML Specialist | Community & Data Platform Engineer';
+      doc.text(subtitleText, 18, 23);
 
       // Contact Row
-      doc.setFontSize(8.5);
-      doc.setTextColor(226, 232, 240);
-      doc.text('Lagos, Nigeria (GMT+1)   |   godtimebenson09@gmail.com   |   github.com/mrphatom', 18, 35);
+      doc.setFontSize(9);
+      doc.setTextColor(203, 213, 225);
+      doc.text('godtimebenson09@gmail.com   |   github.com/mrphatom', 18, 31);
 
-      let y = 62;
+      let y = 56;
 
-      const addSectionHeader = (title: string) => {
-        // Section dividing line
-        doc.setDrawColor(226, 232, 240);
-        doc.setLineWidth(0.4);
-        doc.line(18, y - 2, 192, y - 2);
-
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(12);
-        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-        doc.text(title.toUpperCase(), 18, y + 4);
-        y += 12;
-      };
-
-      // Summary
-      addSectionHeader('Summary');
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
-      doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-      const summaryText = 'Senior Frontend Engineer specializing in bridging the gap between sophisticated aesthetics and high-performance frontend engineering. Expertise in interactive web architectures, React, TypeScript, Tailwind CSS, Framer Motion, and Large Language Model (LLM) evaluations.';
-      const splitSummary = doc.splitTextToSize(summaryText, 174);
-      doc.text(splitSummary, 18, y);
-      y += (splitSummary.length * 4.8) + 8;
-
-      // Experience
-      addSectionHeader('Experience');
-
-      const addJob = (role: string, company: string, period: string, bullets: string[]) => {
-        if (y > 245) {
+      const addSectionHeader = (title: string, neededHeight = 15) => {
+        if (y + neededHeight > 275) {
           doc.addPage();
-          y = 20;
+          y = 18;
         }
 
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(11);
+        doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
+        doc.text(title.toUpperCase(), 18, y + 4);
+
+        doc.setDrawColor(accentColor[0], accentColor[1], accentColor[2]);
+        doc.setLineWidth(0.4);
+        doc.line(18, y + 6, 192, y + 6);
+
+        y += 13;
+      };
+
+      // Professional Summary Section
+      addSectionHeader('Professional Summary', 30);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(bodyColor[0], bodyColor[1], bodyColor[2]);
+      const summaryText = "A driven and versatile Computer Scientist with a Master's degree (Distinction) and a strong foundation in algorithms, machine learning, and AI systems. Over three years of hands-on experience spanning data platform engineering, online education, and Web3 community management. Known for translating complex technical concepts into clear, actionable insights and for building thriving digital communities from the ground up. Equally comfortable writing research-grade documentation and moderating high-stakes live events — bridging the gap between technical depth and human connection.";
+      const splitSummary = doc.splitTextToSize(summaryText, 174);
+      doc.text(splitSummary, 18, y);
+      y += (splitSummary.length * 4.2) + 7;
+
+      // Professional Experience Section
+      addSectionHeader('Professional Experience', 45);
+
+      const addJob = (role: string, company: string, period: string, bullets: string[]) => {
+        let estimatedHeight = 10;
+        const wrappedBullets: string[][] = [];
+        bullets.forEach(b => {
+          const lines = doc.splitTextToSize(b, 168);
+          wrappedBullets.push(lines);
+          estimatedHeight += (lines.length * 4.2) + 1.5;
+        });
+
+        if (y + estimatedHeight > 275) {
+          doc.addPage();
+          y = 18;
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
         doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.text(role, 18, y);
-        
-        doc.setFont('helvetica', 'italic');
-        doc.setFontSize(9.5);
-        doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
-        doc.text(`${company}  (${period})`, 18, y + 4.5);
-        y += 9;
 
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9.5);
-        doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-        
-        bullets.forEach((bullet) => {
-          if (y > 270) {
-            doc.addPage();
-            y = 20;
-          }
-          doc.text('•', 21, y);
-          const splitBullet = doc.splitTextToSize(bullet, 166);
-          doc.text(splitBullet, 25, y);
-          y += (splitBullet.length * 4.5) + 1.2;
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`${company}  |  ${period}`, 18, y + 4.2);
+        y += 8;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(bodyColor[0], bodyColor[1], bodyColor[2]);
+
+        wrappedBullets.forEach(lines => {
+          lines.forEach((line, index) => {
+            if (y > 275) {
+              doc.addPage();
+              y = 18;
+            }
+            if (index === 0) {
+              doc.text('•', 21, y);
+              doc.text(line, 25, y);
+            } else {
+              doc.text(line, 25, y);
+            }
+            y += 4.2;
+          });
+          y += 1.5;
         });
-        y += 4;
+        y += 2.5;
       };
 
       addJob(
-        'AI Specialist / Evaluator',
-        'Mercor',
-        'Apr 2026 - Present',
+        'Data Platform Engineer',
+        'Discord',
+        'May 2023 – Present',
         [
-          'Evaluating, training, aligning, and building state-of-the-art AI agents and Large Language Models for complex reasoning capabilities.',
-          'Spearheaded LLM alignment strategies and custom evaluation benchmarks to validate multi-step reasoning capabilities.',
-          'Collaborated closely on complex prompt architectures and Reinforcement Learning from Human Feedback (RLHF) guidelines.',
-          'Engineered custom playground interfaces and high-performance evaluation tools to streamline fine-tuning cycles.'
+          'Supported data pipeline operations and platform integrity for one of the world\'s largest communication platforms, serving hundreds of millions of active users.',
+          'Collaborated cross-functionally to monitor, maintain, and optimise data workflows supporting real-time messaging infrastructure.',
+          'Contributed to platform reliability initiatives and internal tooling improvements to enhance engineer productivity.'
         ]
       );
 
       addJob(
-        'Lead Software Engineer',
-        'Apex Systems',
-        'Sept 2024 - Apr 2026',
+        'Online Tutor — Computer Science & Mathematics',
+        'Wyzant',
+        'Feb 2024 – Mar 2025',
         [
-          'Built high-performance component frameworks and automated layout benchmarks.',
-          'Orchestrated smooth dynamic interfaces and customized microinteractions.',
-          'Designed complex visual configurations and customized analytical dashboards.'
+          'Delivered personalised, one-on-one tutoring sessions in Computer Science, algorithms, data structures, and mathematics to students at various academic levels.',
+          'Developed custom learning plans and problem sets to address individual knowledge gaps, resulting in measurably improved student performance.',
+          'Built a reputation for clear, patient, and thorough explanation of complex concepts, maintaining consistently high student satisfaction ratings.'
         ]
       );
 
       addJob(
-        'Loomis Visuals - Frontend Developer',
-        'Loomis Visuals',
-        'Feb 2022 - Aug 2024',
+        'Discord Moderator',
+        'Glider_fi',
+        'Feb 2025 – Oct 2025',
         [
-          'Designed creative layout solutions and highly custom graphics integrations.',
-          'Developed smooth web experiences utilizing modern CSS, TypeScript, and Framer Motion animation loops.'
+          'Enforced community guidelines and cultivated a respectful, positive environment for members in a fast-paced Web3 project.',
+          'Managed support tickets and delivered real-time assistance on project updates, resolving user concerns with speed and clarity.',
+          'Hosted and moderated live AMAs with the core team, coordinating role assignments and boosting community engagement.',
+          'Identified and actioned bad actors — including bots, scammers, and phishing attempts — to ensure a safe and trustworthy social space.'
         ]
       );
 
-      // Skills Section
-      addSectionHeader('Technical Skills');
-      
-      const skillsLeft = [
-        'Frontend: React, TypeScript, Framer Motion, Next.js, CSS/CSS Grid, Tailwind CSS',
-        'Design: UI/UX Design, Figma Mapping, Design Systems, Motion Dynamics',
-        'Utilities: Blockchain Engineering, Node.js, GraphQL/REST, Git & CI/CD Pipelines'
+      addJob(
+        'Community Moderator',
+        'SkyTradeNetwork',
+        'Aug 2025 – Mar 2026',
+        [
+          'Managed and scaled the official Discord and Telegram communities for a DePIN (Decentralised Physical Infrastructure) air-rights platform, fostering an engaged and informed user base.',
+          'Served as the primary point of contact for technical queries on air-rights claims, the $SKY points programme, and Solana wallet integration.',
+          'Enforced community standards to eliminate spam, scams, and FUD — maintaining a high-quality discourse environment at all times.',
+          'Organised and moderated community events including AMAs, token incentive campaigns, and referral drives that directly contributed to user acquisition growth.',
+          'Acted as a feedback bridge between the community and the core team, relaying bug reports, feature requests, and sentiment insights from drone operators and property owners.'
+        ]
+      );
+
+      // Force Page 2 for Education & Projects to mirror the uploaded resume exactly
+      doc.addPage();
+      y = 18;
+
+      // Education Section
+      addSectionHeader('Education', 35);
+
+      const addEducation = (degree: string, institution: string, period: string, bullet: string) => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(degree, 18, y);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(`${institution}  |  ${period}`, 18, y + 4);
+        y += 7.5;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(bodyColor[0], bodyColor[1], bodyColor[2]);
+        const lines = doc.splitTextToSize(bullet, 168);
+        lines.forEach((line, index) => {
+          if (index === 0) {
+            doc.text('•', 21, y);
+            doc.text(line, 25, y);
+          } else {
+            doc.text(line, 25, y);
+          }
+          y += 4.2;
+        });
+        y += 3;
+      };
+
+      addEducation(
+        'M.Sc Computer Science — Distinction (81%)',
+        'Rivers State University',
+        'May 2024 – Aug 2025',
+        'Completed a postgraduate degree in Computer Science with a Distinction, focusing on advanced algorithms, machine learning, and AI systems design.'
+      );
+
+      addEducation(
+        'B.Sc (Hons) Computer Science — First Class (4.86 GPA)',
+        'Rivers State University',
+        'Sep 2019 – Aug 2022',
+        'Graduated with First Class Honours, demonstrating exceptional academic performance across core CS disciplines including data structures, software engineering, and computer networks.'
+      );
+
+      addEducation(
+        'Professional Certification — Computer Science',
+        'Coursera / Arizona State University',
+        'Apr 2021 – Nov 2023',
+        'Completed graduate-level coursework in Computer Science through Coursera\'s partnership with Arizona State University, reinforcing knowledge in algorithms, theory of computation, and software systems.'
+      );
+
+      y += 2;
+
+      // Projects Section
+      addSectionHeader('Featured Projects', 45);
+
+      const addProject = (title: string, bullets: string[]) => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(title, 18, y);
+        y += 4.5;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(bodyColor[0], bodyColor[1], bodyColor[2]);
+        bullets.forEach(b => {
+          const lines = doc.splitTextToSize(b, 168);
+          lines.forEach((line, index) => {
+            if (index === 0) {
+              doc.text('•', 21, y);
+              doc.text(line, 25, y);
+            } else {
+              doc.text(line, 25, y);
+            }
+            y += 4.2;
+          });
+          y += 1.5;
+        });
+        y += 2.5;
+      };
+
+      addProject(
+        'Golem — Social Platform with Integrated AI',
+        [
+          'Designed and built a full-featured social platform enabling user connection, content posting, real-time chat, and community interaction.',
+          'Integrated a proprietary AI moderation system with personalised recommendation algorithms, tailoring each user\'s feed experience dynamically.'
+        ]
+      );
+
+      addProject(
+        'LightPaper — AI-Powered Technical Research Assistant',
+        [
+          'Architected a conversational AI system leveraging GPT-4 via API to simulate expert-level technical dialogue for computer science research and study.',
+          'Implemented custom system prompting and Chain-of-Thought (CoT) reasoning patterns, improving the accuracy of complex CS explanations by 30%.',
+          'Built a response framework optimised for Markdown and LaTeX rendering, ensuring mathematical clarity and high-fidelity technical documentation.',
+          'Integrated a Python backend to deliver a seamless, context-aware experience for technical researchers and postgraduate students.'
+        ]
+      );
+
+      y += 2;
+
+      // Technical Skills Section
+      addSectionHeader('Technical Skills', 40);
+
+      const skillsData = [
+        { cat: 'Programming Languages', val: 'Python, C++, Java' },
+        { cat: 'AI / ML', val: 'LLM Architecture, RLHF Fine-tuning, Chain-of-Thought Prompting, GPT-4 API Integration' },
+        { cat: 'Research Tools', val: 'MATLAB, R' },
+        { cat: 'Documentation', val: 'Markdown, LaTeX (Expert)' },
+        { cat: 'Community Tools', val: 'Discord, Telegram, Zealy, Galxe, Collab.Land, Wick Bot, Rose Bot' },
+        { cat: 'Web3 Ecosystem', val: 'Solana Wallet Integration, DePIN, Tokenomics, DAO Governance' }
       ];
 
+      skillsData.forEach(item => {
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.text(item.cat, 18, y);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(bodyColor[0], bodyColor[1], bodyColor[2]);
+
+        const wrappedVal = doc.splitTextToSize(item.val, 126);
+        wrappedVal.forEach((line: string, index: number) => {
+          doc.text(line, 66, y + (index * 4));
+        });
+
+        y += Math.max(wrappedVal.length * 4, 5) + 2.2;
+      });
+
+      y += 2;
+
+      // Key Competencies Section
+      addSectionHeader('Key Competencies', 45);
+
+      const devCompetencies = [
+        'CS Theory, Complexity Classes & Optimisation',
+        'Advanced ML & LLM Architecture',
+        'RLHF Tuning & Prompt Engineering',
+        'Academic Content Authoring & Logic Proofs',
+        'Technical Documentation Review & Verification'
+      ];
+
+      const commCompetencies = [
+        'Crisis Management & FUD De-escalation',
+        'Anti-Spam, Bot Mitigation & Platform Security',
+        'Incentivised Engagement (Quests, Rewards, Campaigns)',
+        'AMA Hosting & Live Event Coordination',
+        'Tokenomics Strategy & Community Growth'
+      ];
+
+      doc.setFillColor(241, 245, 249);
+      doc.rect(18, y, 84, 6.5, 'F');
+      doc.rect(106, y, 86, 6.5, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(accentColor[0], accentColor[1], accentColor[2]);
+      doc.text('DEVELOPMENT', 21, y + 4.5);
+      doc.text('COMMUNITY & MODERATION', 109, y + 4.5);
+      y += 9.5;
+
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
-      doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-      
-      skillsLeft.forEach((skill) => {
-        if (y > 275) {
-          doc.addPage();
-          y = 20;
+      doc.setFontSize(8.5);
+      doc.setTextColor(bodyColor[0], bodyColor[1], bodyColor[2]);
+
+      const linesCount = Math.max(devCompetencies.length, commCompetencies.length);
+      for (let i = 0; i < linesCount; i++) {
+        if (devCompetencies[i]) {
+          doc.text('•', 21, y);
+          const splitLine = doc.splitTextToSize(devCompetencies[i], 78);
+          splitLine.forEach((l: string, idx: number) => {
+            doc.text(l, 25, y + (idx * 3.8));
+          });
         }
+        if (commCompetencies[i]) {
+          doc.text('•', 109, y);
+          const splitLine = doc.splitTextToSize(commCompetencies[i], 80);
+          splitLine.forEach((l: string, idx: number) => {
+            doc.text(l, 113, y + (idx * 3.8));
+          });
+        }
+        const devHeight = devCompetencies[i] ? doc.splitTextToSize(devCompetencies[i], 78).length * 3.8 : 0;
+        const commHeight = commCompetencies[i] ? doc.splitTextToSize(commCompetencies[i], 80).length * 3.8 : 0;
+        y += Math.max(devHeight, commHeight, 4.5) + 1.5;
+      }
+
+      // Force Interests to Page 3 to match the exact page layout of his real paper resume
+      doc.addPage();
+      y = 18;
+
+      addSectionHeader('Interests', 35);
+
+      const interestsData = [
+        { title: 'Algorithmic Transparency', text: 'Passionate about understanding how ML models process and reason about data, and the critical importance of factual accuracy in generative AI outputs.' },
+        { title: 'Linguistic Nuance in AI', text: 'Fascinated by the subtle differences between human-sounding text and robotic outputs, and how that insight can train more natural, empathetic AI models.' },
+        { title: 'Prompt Engineering & LLM Optimisation', text: 'Continuously exploring how carefully crafted instructions shape AI reasoning quality, output structure, and task performance.' },
+        { title: 'Knowledge Synthesis', text: 'Enjoys distilling dense research into structured, accessible tutorials and study guides that empower learners at every level.' },
+        { title: 'Community Dynamics & Web3 Governance', text: 'Deeply interested in the social mechanics of digital-native communities, including how tokenomics and on-chain governance models can be leveraged to reward positive contribution and cultivate long-term loyalty.' }
+      ];
+
+      interestsData.forEach(item => {
+        if (y + 12 > 275) {
+          doc.addPage();
+          y = 18;
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
         doc.text('•', 21, y);
-        doc.text(skill, 25, y);
-        y += 5.5;
+        doc.text(item.title, 25, y);
+        
+        const tw = doc.getTextWidth(item.title);
+        doc.text(' — ', 25 + tw, y);
+        const dw = doc.getTextWidth(' — ');
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(bodyColor[0], bodyColor[1], bodyColor[2]);
+        
+        const firstLineAvail = 168 - tw - dw;
+        const descWords = item.text.split(' ');
+        let firstLineText = '';
+        let wordIdx = 0;
+        
+        while (wordIdx < descWords.length) {
+          const testText = firstLineText ? firstLineText + ' ' + descWords[wordIdx] : descWords[wordIdx];
+          if (doc.getTextWidth(testText) > firstLineAvail) {
+            break;
+          }
+          firstLineText = testText;
+          wordIdx++;
+        }
+        
+        doc.text(firstLineText, 25 + tw + dw, y);
+        y += 4.5;
+
+        if (wordIdx < descWords.length) {
+          const remainderText = descWords.slice(wordIdx).join(' ');
+          const splitRemainder = doc.splitTextToSize(remainderText, 168);
+          splitRemainder.forEach((line: string) => {
+            if (y > 275) {
+              doc.addPage();
+              y = 18;
+            }
+            doc.text(line, 25, y);
+            y += 4.5;
+          });
+        }
+        y += 2.2;
       });
 
       doc.save('Godtime_Benson_Resume.pdf');
@@ -864,7 +1170,7 @@ export default function App() {
     }
   };
 
-  const profile = portfolioData.profile;
+  const profile = editableData.profile;
 
   const handleSocialRedirect = (e: ReactMouseEvent<HTMLAnchorElement>, url: string, label: string) => {
     e.preventDefault();
@@ -888,6 +1194,25 @@ export default function App() {
     }
     window.dispatchEvent(new CustomEvent('trigger-glance-end-island'));
   };
+
+  if (isAdminView) {
+    return (
+      <AdminPanel
+        currentData={editableData}
+        onSave={(newData) => {
+          setEditableData(newData);
+          try {
+            localStorage.setItem('portfolio_data', JSON.stringify(newData));
+          } catch (e) {
+            console.error(e);
+          }
+        }}
+        onClose={() => {
+          navigateTo('/');
+        }}
+      />
+    );
+  }
 
   return (
     <div className="w-screen min-h-screen bg-zinc-100/40 dark:bg-[#060606] text-zinc-800 dark:text-zinc-100 selection:bg-zinc-200 dark:selection:bg-zinc-800 selection:text-zinc-900 transition-colors duration-300 md:p-3 lg:p-4 xl:p-6 overflow-x-hidden lg:h-screen lg:overflow-hidden flex items-center justify-center">
@@ -1249,15 +1574,15 @@ export default function App() {
         >
           
           <div id="work">
-            <Projects projects={portfolioData.projects} />
+            <Projects projects={editableData.projects} />
           </div>
           
           <div id="skills">
-            <Skills skills={portfolioData.skills} />
+            <Skills skills={editableData.skills} />
           </div>
           
           <div id="experience">
-            <ExperienceSection experiences={portfolioData.experiences} />
+            <ExperienceSection experiences={editableData.experiences} />
           </div>
           
           <div id="contact">

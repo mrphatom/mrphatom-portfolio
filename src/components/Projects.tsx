@@ -1,4 +1,4 @@
-import { useState, useEffect, MouseEvent } from 'react';
+import React, { useState, useEffect, MouseEvent, useRef, TouchEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ExternalLink, Code, FolderOpen, X, ArrowUpRight } from 'lucide-react';
 import { Project } from '../types';
@@ -13,6 +13,29 @@ export default function Projects({ projects }: ProjectsProps) {
   const [selectedTag, setSelectedTag] = useState('All');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Swipe gesture touch references
+  const touchStartY = useRef<number | null>(null);
+  const touchStartX = useRef<number | null>(null);
+
+  const handleTouchStart = (e: TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY;
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: TouchEvent) => {
+    if (touchStartY.current === null || touchStartX.current === null) return;
+    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+
+    // Detect solid, predominantly vertical swipe (both up and down are accepted for maximum fluidity)
+    if (Math.abs(deltaY) > 75 && Math.abs(deltaY) > Math.abs(deltaX)) {
+      setActiveProject(null);
+    }
+
+    touchStartY.current = null;
+    touchStartX.current = null;
+  };
 
   // Universal handler to intercept external navigation and pass to Dynamic Island
   const handleExternalRedirect = (e: MouseEvent<HTMLAnchorElement>, url: string, projectName: string) => {
@@ -314,9 +337,17 @@ export default function Projects({ projects }: ProjectsProps) {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 15 }}
                 transition={{ type: 'spring', duration: 0.45 }}
-                className="w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-y-auto shadow-2xl relative max-h-[90vh] sm:max-h-[85vh] flex flex-col"
+                className="w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-y-auto shadow-2xl relative max-h-[90vh] sm:max-h-[85vh] flex flex-col active:cursor-grab"
                 onClick={(e) => e.stopPropagation()}
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
               >
+                {/* Mobile Touch-Swipe visual handle indicators */}
+                <div className="flex flex-col items-center justify-center pt-2.5 pb-1 md:hidden gap-1 shrink-0">
+                  <div className="w-12 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700 opacity-80" />
+                  <span className="text-[9px] font-mono text-zinc-400 dark:text-zinc-500 uppercase tracking-widest leading-none">Swipe to Dismiss</span>
+                </div>
+
                 {/* Close Trigger Button */}
                 <button
                   id="close-spec-modal-btn"

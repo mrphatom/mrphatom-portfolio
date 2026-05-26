@@ -507,20 +507,19 @@ export default function Contact({ profile }: ContactProps) {
             <div className="flex items-center gap-3">
               <h2
                 id="contact-heading"
-                className="text-3xl md:text-4xl font-display font-bold text-zinc-900 dark:text-zinc-50 tracking-tight cursor-help select-none"
-                onClick={handleInboxTrigger}
-                title="Securely view locally submitted messages (Admin only)"
+                className="text-3xl md:text-4xl font-display font-bold text-zinc-900 dark:text-zinc-50 tracking-tight select-none"
               >
                 Get in Touch
               </h2>
-              {/* Subtle visual indicator portal to access local leads submissions offline */}
+              {/* Subtle visual indicator portal to access local leads submissions inside admin panel */}
               <button
                 id="open-inbox-portal-btn"
-                onClick={handleInboxTrigger}
-                className={`p-1.5 rounded-lg border text-zinc-500 dark:text-zinc-400 transition-all cursor-pointer relative ${
-                  inboxOpen ? 'bg-zinc-900 border-zinc-900 text-white dark:bg-white dark:border-white dark:text-zinc-950 font-bold' : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-[#0e0e0e]'
-                }`}
-                title="Open Secure Leads Inbound Hub"
+                onClick={() => {
+                  window.history.pushState({}, '', '/admin');
+                  window.dispatchEvent(new PopStateEvent('popstate'));
+                }}
+                className="p-1.5 rounded-lg border text-zinc-500 dark:text-zinc-400 transition-all cursor-pointer relative border-zinc-200 dark:border-zinc-805 bg-white dark:bg-[#0e0e0e]"
+                title="Open Secure Leads Inbound Hub on the Admin Panel"
               >
                 <Inbox size={12} />
                 {storedMessages.length > 0 && (
