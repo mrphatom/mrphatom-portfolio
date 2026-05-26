@@ -152,11 +152,13 @@ export default function Hero({ profile }: HeroProps) {
                     }));
                   }}
                   onMouseEnter={() => {
+                    if (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches) return;
                     window.dispatchEvent(new CustomEvent('trigger-glance-island', {
                       detail: { type: 'social', url: link.url, name: link.platform === 'email' ? 'Email Client' : link.label }
                     }));
                   }}
                   onMouseLeave={() => {
+                    if (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches) return;
                     window.dispatchEvent(new CustomEvent('trigger-glance-end-island'));
                   }}
                   target="_blank"

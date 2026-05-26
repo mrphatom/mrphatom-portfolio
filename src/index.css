@@ -64,3 +64,34 @@ a, button, [role="button"], img {
   background: #a1a1aa;
 }
 
+/* Custom visual cue for interactable elements in glance / prompt state */
+.glance-active-pulse {
+  position: relative !important;
+  animation: glance-scale-pulse 2s infinite ease-in-out !important;
+  border-color: #0ea5e9 !important; /* sky accent */
+  outline: 2px solid rgba(14, 165, 233, 0.45) !important;
+  outline-offset: 2px !important;
+  z-index: 40 !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.glance-active-pulse:hover {
+  transform: scale(1.02) rotate(-1deg) !important;
+}
+
+@keyframes glance-scale-pulse {
+  0% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.4);
+  }
+  50% {
+    transform: scale(0.98);
+    box-shadow: 0 0 0 6px rgba(14, 165, 233, 0);
+  }
+  100% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 0 rgba(14, 165, 233, 0);
+  }
+}
+
+

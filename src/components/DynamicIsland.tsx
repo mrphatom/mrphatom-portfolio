@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sun, Moon, Monitor, ExternalLink, Code, FileDown, ChevronUp, Clock } from 'lucide-react';
 import { playSoftClick, playNavTick } from '../utils/audio';
+import { triggerHaptic as centralTriggerHaptic, hapticPatterns } from '../utils/haptics';
 
 const PAGE_LOAD_TIME = Date.now();
 
@@ -71,18 +72,20 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
     }
   };
 
-  // Trigger browser-based vibration haptic feedback (impact)
-  const triggerHaptic = (ms = 12, dynamicScale = false) => {
-    let finalMs = ms;
-    if (dynamicScale && containerWidth > 140) {
-      // Scale haptic duration dynamically based on containerWidth: maps wider states to higher vibration durations
-      finalMs = ms + Math.floor((containerWidth - 140) / 10);
-      // Cap at reasonable duration to maintain tactile click feel
-      finalMs = Math.min(finalMs, 35);
+  // Trigger browser-based vibration haptic feedback (impact) via centralized utility
+  const triggerHaptic = (ms: keyof typeof hapticPatterns | number = 12, dynamicScale = false) => {
+    let finalMs: keyof typeof hapticPatterns | number = ms;
+    if (typeof ms === 'number') {
+      let calc = ms;
+      if (dynamicScale && containerWidth > 140) {
+        // Scale haptic duration dynamically based on containerWidth: maps wider states to higher vibration durations
+        calc = ms + Math.floor((containerWidth - 140) / 10);
+        // Cap at reasonable duration to maintain tactile click feel
+        calc = Math.min(calc, 35);
+      }
+      finalMs = calc;
     }
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(finalMs);
-    }
+    centralTriggerHaptic(finalMs);
   };
 
   // Add a beautifully balanced surface ripple relative to container coordinate space
@@ -142,7 +145,13 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
     pointerStartX.current = null;
   };
 
-  const handlePointerCancelOrLeave = () => {
+  const handlePointerCancelOrLeave = (e: React.PointerEvent<HTMLDivElement>) => {
+    // On touch devices, slight finger movement or physiological touch expansion causes pointerleave.
+    // We avoid resetting the long-press detection parameters on touch pointer leaves to avoid jank.
+    if (e.pointerType === 'touch') {
+      setIsHolding(false);
+      return;
+    }
     setIsHolding(false);
     clearLongPressRef();
     pointerStartY.current = null;
@@ -194,7 +203,11 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
     triggerHaptic(18, true); // Defined success pulse
     setIsBouncing(true);
     setTimeout(() => {
-      if (island.redirectUrl) {
+      if (island.projectName === 'resume') {
+        if (onResumeConfirm) {
+          onResumeConfirm();
+        }
+      } else if (island.redirectUrl) {
         window.open(island.redirectUrl, '_blank', 'noopener,noreferrer');
       }
       onClose();
@@ -223,7 +236,7 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
   };
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100000] pointer-events-none select-none px-4 w-full flex justify-center">
+    <div className="fixed bottom-4 left-0 right-0 z-[100000] pointer-events-none select-none px-4 flex justify-center">
       <motion.div
         ref={containerRef}
         layout
@@ -256,7 +269,19 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
                 borderRadius: getBorderRadius(),
                 width: 'auto',
                 height: 'auto',
-                opacity: 1
+                opacity: 1,
+                transition: {
+                  y: {
+                    type: 'keyframes',
+                    duration: 0.6,
+                    ease: "easeOut"
+                  },
+                  scale: {
+                    type: 'keyframes',
+                    duration: 0.6,
+                    ease: "easeOut"
+                  }
+                }
               }
             : isHolding
               ? {
@@ -371,14 +396,22 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
 
           {island.type === 'glance' && !isLongPressed && (
             <div 
-              className="flex items-center gap-3.5 px-6 py-3 text-xs font-semibold tracking-wide font-sans whitespace-nowrap text-white/95"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                playNavTick();
+                triggerHaptic(22, true);
+                setIsLongPressed(true);
+              }}
+              title="Click or hold to reveal elements"
+              className="flex items-center gap-2 xs:gap-3.5 px-4 xs:px-6 py-2.5 xs:py-3 text-[11px] xs:text-xs font-semibold tracking-wide font-sans whitespace-nowrap text-white/95 cursor-pointer select-none"
             >
               <div className="relative flex h-2 w-2 select-none">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0a84ff] opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#0a84ff]"></span>
               </div>
               <span className="font-sans font-semibold text-[13px] text-zinc-200">
-                {island.projectName === 'repo' ? 'View Source Code' : island.projectName === 'demo' ? 'Launch Application' : 'Connect Profile'}
+                {island.projectName === 'repo' ? 'View Source Code' : island.projectName === 'demo' ? 'Launch Application' : island.projectName === 'resume' ? 'Professional Resume' : 'Connect Profile'}
               </span>
               <motion.div
                 initial={{ opacity: 0, y: 3 }}
@@ -393,19 +426,27 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
 
           {island.type === 'glance' && isLongPressed && (
             <div 
-              className="w-[290px] xs:w-[330px] sm:w-[350px] p-4.5 flex flex-col gap-4 font-sans"
+              className="w-[calc(100vw-32px)] xs:w-[320px] sm:w-[350px] max-w-full p-4 xs:p-4.5 flex flex-col gap-4 font-sans"
             >
               <div className="flex items-start gap-3">
-                <div className={`p-2.5 rounded-2xl bg-[#1c1c1e] shrink-0 mt-0.5 border border-white/[0.03] ${island.projectName === 'demo' ? 'text-[#30d158]' : 'text-[#0a84ff]'}`}>
-                  {island.projectName === 'demo' ? <ExternalLink size={16} className="stroke-[2.5]" /> : <Code size={16} className="stroke-[2.5]" />}
+                <div className={`p-2.5 rounded-2xl bg-[#1c1c1e] shrink-0 mt-0.5 border border-white/[0.03] ${island.projectName === 'demo' ? 'text-[#30d158]' : island.projectName === 'resume' ? 'text-amber-400' : 'text-[#0a84ff]'}`}>
+                  {island.projectName === 'demo' ? (
+                    <ExternalLink size={16} className="stroke-[2.5]" />
+                  ) : island.projectName === 'resume' ? (
+                    <FileDown size={16} className="stroke-[2.5]" />
+                  ) : (
+                    <Code size={16} className="stroke-[2.5]" />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] uppercase tracking-widest font-bold text-zinc-400">Tactile Link</span>
-                    <span className={`h-1.5 w-1.5 rounded-full ${island.projectName === 'demo' ? 'bg-[#30d158] shadow-[0_0_8px_#30d158]' : 'bg-[#0a84ff] shadow-[0_0_8px_#0a84ff]'}`}></span>
+                    <span className="text-[9px] uppercase tracking-widest font-bold text-zinc-400">
+                      {island.projectName === 'resume' ? 'Document' : 'Tactile Link'}
+                    </span>
+                    <span className={`h-1.5 w-1.5 rounded-full ${island.projectName === 'demo' ? 'bg-[#30d158] shadow-[0_0_8px_#30d158]' : island.projectName === 'resume' ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.6)]' : 'bg-[#0a84ff] shadow-[0_0_8px_#0a84ff]'}`}></span>
                   </div>
                   <h5 className="text-[13px] font-semibold text-white leading-tight mt-0.5">
-                    {island.projectName === 'repo' ? 'Open Source Repository?' : island.projectName === 'demo' ? 'Launch Live Application?' : 'Connect with Benson?'}
+                    {island.projectName === 'repo' ? 'Open Source Repository?' : island.projectName === 'demo' ? 'Launch Live Application?' : island.projectName === 'resume' ? 'Download Professional Resume?' : 'Connect with Benson?'}
                   </h5>
                   <p className="text-[11px] font-medium text-zinc-400 mt-1 leading-normal break-all">
                     Target: <span className="text-zinc-200 underline decoration-zinc-500 underline-offset-2">{island.targetName || 'External Platform'}</span>
@@ -423,9 +464,15 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
                 </button>
                 <button
                   onClick={handleProceed}
-                  className={`w-full py-2.5 text-xs font-bold rounded-full text-white transition-all cursor-pointer select-none active:scale-[0.96] text-center shadow-lg ${island.projectName === 'demo' ? 'bg-[#30d158] hover:bg-[#40e068] active:bg-[#24b049] shadow-[#30d158]/25' : 'bg-[#0a84ff] hover:bg-[#2997ff] active:bg-[#0071e3] shadow-[#0a84ff]/25'}`}
+                  className={`w-full py-2.5 text-xs font-bold rounded-full text-white transition-all cursor-pointer select-none active:scale-[0.96] text-center shadow-lg ${
+                    island.projectName === 'demo' 
+                      ? 'bg-[#30d158] hover:bg-[#40e068] active:bg-[#24b049] shadow-[#30d158]/25' 
+                      : island.projectName === 'resume'
+                      ? 'bg-amber-500 hover:bg-amber-400 active:bg-amber-600 shadow-amber-500/25'
+                      : 'bg-[#0a84ff] hover:bg-[#2997ff] active:bg-[#0071e3] shadow-[#0a84ff]/25'
+                  }`}
                 >
-                  Open
+                  {island.projectName === 'resume' ? 'Download' : island.projectName === 'repo' ? 'View Code' : 'Open'}
                 </button>
               </div>
             </div>
@@ -441,17 +488,17 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
                 setIsTimeExpanded(true);
               }}
               title="Double click to reveal timer"
-              className="flex items-center gap-3 px-6 py-3.5 text-xs font-semibold tracking-wide font-sans whitespace-nowrap text-white/95 cursor-pointer select-none"
+              className="flex items-center gap-2 xs:gap-3 px-3.5 xs:px-6 py-3 xs:py-3.5 text-[11px] xs:text-xs font-semibold tracking-wide font-sans whitespace-nowrap text-white/95 cursor-pointer select-none"
             >
-              <div className="p-1.5 rounded-full bg-white/[0.12] text-[#ff3331] animate-[pulse_1.5s_infinite] flex items-center justify-center shadow-[0_0_8px_rgba(255,51,49,0.3)]">
+              <div className="p-1.5 rounded-full bg-white/[0.12] text-[#ff3331] animate-[pulse_1.5s_infinite] flex items-center justify-center shadow-[0_0_8px_rgba(255,51,49,0.3)] shrink-0">
                 <Clock size={12} className="stroke-[2.5]" />
               </div>
-              <span className="font-sans font-semibold text-[13px] text-zinc-100">
-                Active Spent: {island.minutesSpent} mins
+              <span className="font-sans font-semibold text-zinc-100">
+                Active: {island.minutesSpent} mins
               </span>
               <button
                 onClick={handleCancel}
-                className="ml-3 px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full bg-white/[0.12] hover:bg-white/[0.18] active:bg-white/[0.08] text-zinc-300 hover:text-white transition-all cursor-pointer select-none"
+                className="ml-2 xs:ml-3 px-2 xs:px-3 py-1 text-[9px] xs:text-[10px] font-bold uppercase tracking-wider rounded-full bg-white/[0.12] hover:bg-white/[0.18] active:bg-white/[0.08] text-zinc-300 hover:text-white transition-all cursor-pointer select-none"
               >
                 Dismiss
               </button>
@@ -460,7 +507,7 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
 
           {island.type === 'time_spent' && isTimeExpanded && (
             <div 
-              className="w-[290px] xs:w-[330px] sm:w-[350px] p-5 flex flex-col gap-4 font-sans select-none"
+              className="w-[calc(100vw-32px)] xs:w-[320px] sm:w-[350px] max-w-full p-4 xs:p-5 flex flex-col gap-4 font-sans select-none"
             >
               <div className="flex items-start gap-3">
                 <div className="p-3 rounded-2xl bg-[#ff3331]/[0.1] text-[#ff3331] shrink-0 mt-0.5 border border-[#ff3331]/[0.15] animate-[pulse_2s_infinite]">
@@ -516,7 +563,7 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
 
           {island.type === 'redirect_prompt' && (
             <div 
-              className="w-[290px] xs:w-[330px] sm:w-[350px] p-4.5 flex flex-col gap-4 font-sans"
+              className="w-[calc(100vw-32px)] xs:w-[320px] sm:w-[350px] max-w-full p-4 xs:p-4.5 flex flex-col gap-4 font-sans"
             >
               <div className="flex items-start gap-3">
                 <div className="p-2.5 rounded-2xl bg-[#1c1c1e] text-[#0a84ff] shrink-0 mt-0.5 border border-white/[0.03]">
@@ -556,7 +603,7 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
 
           {island.type === 'download_resume_prompt' && (
             <div 
-              className="w-[290px] xs:w-[330px] sm:w-[350px] p-4.5 flex flex-col gap-4 font-sans"
+              className="w-[calc(100vw-32px)] xs:w-[320px] sm:w-[350px] max-w-full p-4 xs:p-4.5 flex flex-col gap-4 font-sans"
             >
               <div className="flex items-start gap-3">
                 <div className="p-2.5 rounded-2xl bg-[#1c1c1e] text-[#30d158] shrink-0 mt-0.5 border border-white/[0.03]">

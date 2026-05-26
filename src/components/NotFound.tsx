@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Compass, Sparkles, RefreshCcw, Home, HelpCircle } from 'lucide-react';
 import { playSoftClick, playNavTick } from '../utils/audio';
+import { triggerHaptic } from '../utils/haptics';
 
 interface NotFoundProps {
   onGoHome: () => void;
@@ -21,13 +22,6 @@ interface SandboxItem {
 export default function NotFound({ onGoHome, darkMode }: NotFoundProps) {
   const [items, setItems] = useState<SandboxItem[]>([]);
   const [clickCount, setClickCount] = useState(0);
-
-  // Trigger browser-based vibration haptic feedback
-  const triggerHaptic = (ms = 15) => {
-    if (typeof navigator !== 'undefined' && navigator.vibrate) {
-      navigator.vibrate(ms);
-    }
-  };
 
   // Generate some playful drifting fragments in the gravity sandbox on mount
   useEffect(() => {

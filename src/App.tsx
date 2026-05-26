@@ -11,6 +11,7 @@ import DynamicIsland from './components/DynamicIsland';
 import NotFound from './components/NotFound';
 import { Mail, MapPin, Download, WifiOff, RefreshCw, AlertCircle, Sun, Moon, Monitor } from 'lucide-react';
 import { playSoftClick, playNavTick, setGlobalMute } from './utils/audio';
+import { triggerHaptic } from './utils/haptics';
 import ThreeDBackground from './components/ThreeDBackground';
 
 export default function App() {
@@ -63,7 +64,7 @@ export default function App() {
     minutesSpent?: number;
   }>({ type: 'none' });
 
-  // Handle Dynamic Island custom redirect and glance trigger events
+  // Handle Dynamic Island custom redirect, glance trigger events, and global long-press gesture routing
   useEffect(() => {
     const handleTriggerIsland = (e: CustomEvent<{ url: string; name: string }>) => {
       setIsland({
@@ -76,6 +77,15 @@ export default function App() {
     const handleGlanceIsland = (e: CustomEvent<{ type: 'repo' | 'demo' | 'social'; url?: string; name?: string }>) => {
       setIsland(prev => {
         if (prev.type === 'none' || prev.type === 'glance') {
+          // Add visual pulse indicator to the target elements that share this URL (usually repository or demo elements)
+          if (e.detail.url) {
+            try {
+              const el = document.querySelector(`[href="${CSS.escape(e.detail.url)}"]`);
+              if (el) el.classList.add('glance-active-pulse');
+            } catch (err) {
+              // selector safety guard
+            }
+          }
           return {
             type: 'glance',
             projectName: e.detail.type,
@@ -90,12 +100,138 @@ export default function App() {
     const handleGlanceEndIsland = () => {
       setIsland(prev => {
         if (prev.type === 'glance') {
+          try {
+            document.querySelectorAll('.glance-active-pulse').forEach(el => {
+              el.classList.remove('glance-active-pulse');
+            });
+          } catch (e) {
+            // silent ignore
+          }
           return { type: 'none' };
         }
         return prev;
       });
     };
 
+    // Global tactile long-press tracker variables
+    let longPressTimer: NodeJS.Timeout | null = null;
+    let isLongPressActive = false;
+    let startPoint = { x: 0, y: 0 };
+    let currentTargetElement: HTMLElement | null = null;
+
+    const clearTimer = () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    };
+
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = (e.target as HTMLElement).closest('a, button, [role="button"]') as HTMLElement;
+      if (!target) return;
+
+      clearTimer();
+      isLongPressActive = false;
+      startPoint = { x: e.clientX, y: e.clientY };
+      currentTargetElement = target;
+
+      // Start the long-press threshold timer
+      longPressTimer = setTimeout(() => {
+        isLongPressActive = true;
+        
+        // Trigger tactile haptic pulse
+        triggerHaptic('medium');
+        playNavTick();
+
+        // Attribute key to suppress default click handlers
+        target.setAttribute('data-long-pressed', 'true');
+        
+        // Apply styling feedback
+        target.classList.add('glance-active-pulse');
+        
+        const href = target.getAttribute('href');
+        const id = target.getAttribute('id');
+        const textStr = target.innerText || target.textContent || '';
+        
+        if (id === 'hero-resume-download-btn' || textStr.toLowerCase().includes('resume')) {
+          setIsland({
+            type: 'glance',
+            projectName: 'resume',
+            targetName: 'Godtime_Benson_Resume.txt'
+          });
+        } else if (href && href !== '#' && !href.startsWith('mailto:') && !href.startsWith('tel:')) {
+          let siteName = target.getAttribute('aria-label') || target.getAttribute('title') || 'Website';
+          if (!siteName || siteName === 'Website') {
+            try {
+              const urlObj = new URL(href, window.location.href);
+              siteName = urlObj.hostname;
+            } catch {
+              siteName = href;
+            }
+          }
+          let glanceType: 'repo' | 'demo' | 'social' = 'social';
+          if (href.includes('github') || href.includes('code') || textStr.toLowerCase().includes('code')) {
+            glanceType = 'repo';
+          } else if (textStr.toLowerCase().includes('demo') || textStr.toLowerCase().includes('live')) {
+            glanceType = 'demo';
+          }
+          setIsland({
+            type: 'glance',
+            projectName: glanceType,
+            redirectUrl: href,
+            targetName: siteName
+          });
+        } else {
+          setIsland({
+            type: 'glance',
+            projectName: 'social',
+            redirectUrl: href || undefined,
+            targetName: textStr.trim() || 'Interactive Node'
+          });
+        }
+      }, 500); // 500ms long press standard
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!currentTargetElement) return;
+      // Cancel long press sequence if fingers move significantly (e.g. while scrolling)
+      const dx = e.clientX - startPoint.x;
+      const dy = e.clientY - startPoint.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 12) {
+        clearTimer();
+      }
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      clearTimer();
+      if (currentTargetElement && isLongPressActive) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Retain state momentarily to consume subsequent physical clicks safely
+        const target = currentTargetElement;
+        setTimeout(() => {
+          target.removeAttribute('data-long-pressed');
+        }, 300);
+      }
+      currentTargetElement = null;
+    };
+
+    const handlePointerCancel = () => {
+      clearTimer();
+      currentTargetElement = null;
+    };
+
+    const handleLinkClick = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('a, button, [role="button"]') as HTMLElement;
+      if (target && target.getAttribute('data-long-pressed') === 'true') {
+        e.preventDefault();
+        e.stopPropagation();
+        target.removeAttribute('data-long-pressed');
+      }
+    };
+
+    // Refactored context menu and selection-suppression logic for consistent tactical user engagement
     const handleContextMenu = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (
@@ -106,20 +242,44 @@ export default function App() {
           target.closest('img') ||
           target.closest('.pointer-events-auto'))
       ) {
+        // Prevent default browser popup sheets during high-precision holds
         e.preventDefault();
       }
     };
 
+    const handleSelectStart = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target && target.closest('a, button, [role="button"]')) {
+        // Prevent default text selection during deliberate long press interactions
+        e.preventDefault();
+      }
+    };
+
+    // Registrations
     window.addEventListener('trigger-redirect-island' as any, handleTriggerIsland as any);
     window.addEventListener('trigger-glance-island' as any, handleGlanceIsland as any);
     window.addEventListener('trigger-glance-end-island' as any, handleGlanceEndIsland as any);
+    
     document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('selectstart', handleSelectStart);
+    document.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    document.addEventListener('pointermove', handlePointerMove, { passive: true });
+    document.addEventListener('pointerup', handlePointerUp, { capture: true }); // Block standard click bubble if active
+    document.addEventListener('pointercancel', handlePointerCancel, { passive: true });
+    document.addEventListener('click', handleLinkClick, { capture: true });
 
     return () => {
       window.removeEventListener('trigger-redirect-island' as any, handleTriggerIsland as any);
       window.removeEventListener('trigger-glance-island' as any, handleGlanceIsland as any);
       window.removeEventListener('trigger-glance-end-island' as any, handleGlanceEndIsland as any);
+      
       document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('selectstart', handleSelectStart);
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp, { capture: true } as any);
+      document.removeEventListener('pointercancel', handlePointerCancel);
+      document.removeEventListener('click', handleLinkClick, { capture: true } as any);
     };
   }, []);
 
@@ -164,6 +324,19 @@ export default function App() {
 
     return () => clearTimeout(timer);
   }, [themeMode]);
+
+  // Synchronized style clean-up when Island closes
+  useEffect(() => {
+    if (island.type === 'none') {
+      try {
+        document.querySelectorAll('.glance-active-pulse').forEach(el => {
+          el.classList.remove('glance-active-pulse');
+        });
+      } catch (e) {
+        // Safe silent ignore
+      }
+    }
+  }, [island.type]);
 
   const [activeSection, setActiveSection] = useState('work');
   const [ripplePosition, setRipplePosition] = useState<{ x: number; y: number } | null>(null);
@@ -607,12 +780,18 @@ SKILLS
   };
 
   const handleSocialGlanceStart = (url?: string, name?: string) => {
+    if (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches) {
+      return;
+    }
     window.dispatchEvent(new CustomEvent('trigger-glance-island', {
       detail: { type: 'social', url, name }
     }));
   };
 
   const handleSocialGlanceEnd = () => {
+    if (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches) {
+      return;
+    }
     window.dispatchEvent(new CustomEvent('trigger-glance-end-island'));
   };
 

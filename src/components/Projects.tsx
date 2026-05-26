@@ -23,12 +23,19 @@ export default function Projects({ projects }: ProjectsProps) {
   };
 
   const handleGlanceStart = (type: 'repo' | 'demo', url?: string, name?: string) => {
+    // Disable hover-based glance states on touch-only devices to avoid janky simulated mouse hover triggers
+    if (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches) {
+      return;
+    }
     window.dispatchEvent(new CustomEvent('trigger-glance-island', {
       detail: { type, url, name }
     }));
   };
 
   const handleGlanceEnd = () => {
+    if (typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches) {
+      return;
+    }
     window.dispatchEvent(new CustomEvent('trigger-glance-end-island'));
   };
 
@@ -150,18 +157,35 @@ export default function Projects({ projects }: ProjectsProps) {
         {/* Dynamic Grid of Cards using Motion */}
         {filteredProjects.length === 0 ? (
           <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center py-16 px-4 border border-zinc-200/60 dark:border-zinc-850/60 rounded-xl bg-zinc-50/20 dark:bg-zinc-950/20 text-center"
+            initial={{ opacity: 0, scale: 0.96, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 120, damping: 14 }}
+            className="flex flex-col items-center justify-center py-16 px-4 border border-zinc-200/60 dark:border-zinc-850/60 rounded-xl bg-zinc-50/20 dark:bg-zinc-950/20 text-center w-full"
           >
-            <FolderOpen size={32} className="text-zinc-450 dark:text-zinc-505 mb-3" />
-            <p className="text-sm font-light text-zinc-500 dark:text-zinc-400">No projects match your filter selection or text search query.</p>
-            <button 
+            <motion.div
+              initial={{ rotate: -15, scale: 0.8 }}
+              animate={{ rotate: 0, scale: 1 }}
+              transition={{ delay: 0.1, type: "spring", stiffness: 150 }}
+            >
+              <FolderOpen size={36} className="text-zinc-400 dark:text-zinc-505 mb-4 animate-[bounce_3s_infinite]" />
+            </motion.div>
+            <motion.p 
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+              className="text-sm font-light text-zinc-500 dark:text-zinc-400 max-w-sm mb-4 leading-relaxed"
+            >
+              No projects match your filter selection or text search query. Let's start with a fresh orbit!
+            </motion.p>
+            <motion.button 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
               onClick={() => { setSearchQuery(''); setSelectedTag('All'); }}
-              className="mt-4 px-4 py-1.5 text-xs font-mono rounded-lg bg-zinc-900 border border-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:border-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 transition-colors cursor-pointer select-none"
+              className="px-4 py-2 text-xs font-mono rounded-lg bg-zinc-900 border border-zinc-900 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:border-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 transition-colors shadow-xs active:scale-95 duration-105 cursor-pointer select-none"
             >
               Reset Filters & Search
-            </button>
+            </motion.button>
           </motion.div>
         ) : (
           <motion.div
@@ -290,83 +314,86 @@ export default function Projects({ projects }: ProjectsProps) {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 15 }}
                 transition={{ type: 'spring', duration: 0.45 }}
-                className="w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden shadow-2xl relative"
+                className="w-full max-w-2xl bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-y-auto shadow-2xl relative max-h-[90vh] sm:max-h-[85vh] flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Close Trigger Button */}
                 <button
                   id="close-spec-modal-btn"
                   onClick={() => setActiveProject(null)}
-                  className="absolute top-4 right-4 z-50 p-2 rounded-full bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-300 transition-all cursor-pointer active:scale-90"
+                  className="absolute top-4 right-4 z-50 p-2 rounded-full bg-zinc-100/90 hover:bg-zinc-200 dark:bg-zinc-800/90 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-300 transition-all cursor-pointer active:scale-90 shadow-sm"
                   aria-label="Close dialog modal"
                 >
                   <X size={16} />
                 </button>
 
-                {/* Render full preview mockup */}
-                <div className="aspect-video w-full bg-zinc-100 dark:bg-zinc-950 p-6 flex items-center justify-center border-b border-zinc-200/50 dark:border-zinc-850/50">
-                  <div className="w-full h-full">
-                    <ProjectMockup type={activeProject.image} />
-                  </div>
-                </div>
-
-                {/* Project Specs detail info */}
-                <div className="p-8">
-                  <div className="flex flex-wrap items-baseline gap-2.5 mb-2">
-                    <h3 className="text-2xl font-display font-bold text-zinc-900 dark:text-zinc-50">
-                      {activeProject.title}
-                    </h3>
-                    <span className="text-xs uppercase font-mono px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 select-none">
-                      {activeProject.role}
-                    </span>
-                  </div>
-
-                  <p className="text-sm font-light leading-relaxed text-zinc-600 dark:text-zinc-300 mb-6">
-                    {activeProject.longDescription || activeProject.description}
-                  </p>
-
-                  {/* Tags cloud */}
-                  <div className="mb-8">
-                    <span className="text-[10px] font-mono tracking-wider text-zinc-400 uppercase block mb-2">Built With</span>
-                    <div className="flex flex-wrap gap-2">
-                      {activeProject.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="px-2.5 py-1 rounded-md text-xs font-mono bg-zinc-100 text-zinc-750 dark:bg-zinc-800 dark:text-zinc-300 select-none"
-                        >
-                          {tag}
-                        </span>
-                      ))}
+                {/* Content Area Container */}
+                <div className="flex-1 focus:outline-none overflow-y-auto max-h-full">
+                  {/* Render full preview mockup */}
+                  <div className="aspect-video w-full bg-zinc-100 dark:bg-zinc-950 p-6 flex items-center justify-center border-b border-zinc-200/50 dark:border-zinc-850/50 shrink-0">
+                    <div className="w-full h-full">
+                      <ProjectMockup type={activeProject.image} />
                     </div>
                   </div>
 
-                   {/* CTA Redirection */}
-                   <div className="flex gap-4 border-t border-zinc-100 dark:border-zinc-800 pt-6">
-                     {activeProject.demoUrl && (
-                       <a
-                         href={activeProject.demoUrl}
-                         onClick={(e) => handleExternalRedirect(e, activeProject.demoUrl!, activeProject.title)}
-                         onMouseEnter={() => handleGlanceStart('demo', activeProject.demoUrl, activeProject.title)}
-                         onMouseLeave={handleGlanceEnd}
-                         className="inline-flex items-center gap-1.5 bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-950 hover:bg-zinc-855 dark:hover:bg-zinc-150 py-2.5 px-5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                       >
-                         Launch Application
-                         <ExternalLink size={14} />
-                       </a>
-                     )}
-                     {activeProject.codeUrl && (
-                       <a
-                         href={activeProject.codeUrl}
-                         onClick={(e) => handleExternalRedirect(e, activeProject.codeUrl!, activeProject.title)}
-                         onMouseEnter={() => handleGlanceStart('repo', activeProject.codeUrl, activeProject.title)}
-                         onMouseLeave={handleGlanceEnd}
-                         className="inline-flex items-center gap-1.5 bg-transparent border border-zinc-205 dark:border-zinc-805 dark:text-zinc-205 hover:bg-zinc-105 dark:hover:bg-zinc-905 py-2.5 px-5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                       >
-                         Code Repository
-                         <Code size={14} />
-                       </a>
-                     )}
-                   </div>
+                  {/* Project Specs detail info */}
+                  <div className="p-5 sm:p-8 overflow-y-auto max-h-[45vh] sm:max-h-none">
+                    <div className="flex flex-wrap items-baseline gap-2.5 mb-2">
+                      <h3 className="text-xl sm:text-2xl font-display font-bold text-zinc-900 dark:text-zinc-50">
+                        {activeProject.title}
+                      </h3>
+                      <span className="text-xs uppercase font-mono px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 select-none">
+                        {activeProject.role}
+                      </span>
+                    </div>
+
+                    <p className="text-xs sm:text-sm font-light leading-relaxed text-zinc-600 dark:text-zinc-300 mb-6">
+                      {activeProject.longDescription || activeProject.description}
+                    </p>
+
+                    {/* Tags cloud */}
+                    <div className="mb-6 sm:mb-8">
+                      <span className="text-[10px] font-mono tracking-wider text-zinc-400 uppercase block mb-2">Built With</span>
+                      <div className="flex flex-wrap gap-2">
+                        {activeProject.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="px-2.5 py-1 rounded-md text-xs font-mono bg-zinc-100 text-zinc-750 dark:bg-zinc-800 dark:text-zinc-300 select-none"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* CTA Redirection */}
+                    <div className="flex gap-4 border-t border-zinc-100 dark:border-zinc-800 pt-5 sm:pt-6">
+                      {activeProject.demoUrl && (
+                        <a
+                          href={activeProject.demoUrl}
+                          onClick={(e) => handleExternalRedirect(e, activeProject.demoUrl!, activeProject.title)}
+                          onMouseEnter={() => handleGlanceStart('demo', activeProject.demoUrl, activeProject.title)}
+                          onMouseLeave={handleGlanceEnd}
+                          className="inline-flex items-center gap-1.5 bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-950 hover:bg-zinc-855 dark:hover:bg-zinc-150 py-2 py-4 px-4 sm:py-2.5 sm:px-5 rounded-lg text-xs sm:text-sm font-medium transition-colors cursor-pointer active:scale-95"
+                        >
+                          Launch Application
+                          <ExternalLink size={14} />
+                        </a>
+                      )}
+                      {activeProject.codeUrl && (
+                        <a
+                          href={activeProject.codeUrl}
+                          onClick={(e) => handleExternalRedirect(e, activeProject.codeUrl!, activeProject.title)}
+                          onMouseEnter={() => handleGlanceStart('repo', activeProject.codeUrl, activeProject.title)}
+                          onMouseLeave={handleGlanceEnd}
+                          className="inline-flex items-center gap-1.5 bg-transparent border border-zinc-205 dark:border-zinc-805 dark:text-zinc-205 hover:bg-zinc-105 dark:hover:bg-zinc-905 py-2 py-4 px-4 sm:py-2.5 sm:px-5 rounded-lg text-xs sm:text-sm font-medium transition-colors cursor-pointer active:scale-95"
+                        >
+                          Code Repository
+                          <Code size={14} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             </motion.div>
