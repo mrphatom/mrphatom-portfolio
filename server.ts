@@ -2,6 +2,8 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc, writeBatch } from "firebase/firestore";
 
 const PORT = 3000;
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -158,14 +160,30 @@ const DEFAULT_PORTFOLIO_DATA = {
   ]
 };
 
-// Seed portfolio data if not exists
+// Seed portfolio data if not exists locally
 if (!fs.existsSync(PORTFOLIO_FILE)) {
   fs.writeFileSync(PORTFOLIO_FILE, JSON.stringify(DEFAULT_PORTFOLIO_DATA, null, 2), "utf8");
 }
 
-// Seed messages list if not exists
+// Seed messages list if not exists locally
 if (!fs.existsSync(MESSAGES_FILE)) {
   fs.writeFileSync(MESSAGES_FILE, JSON.stringify([], null, 2), "utf8");
+}
+
+// Gracefully initialize Firebase SDK (using API Key Client-mode on server)
+let db: any = null;
+try {
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (fs.existsSync(configPath)) {
+    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    const app = initializeApp(firebaseConfig);
+    db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    console.log("Firebase Client Firestore initialized successfully on backend using API Key.");
+  } else {
+    console.log("Firebase config not found. Operating with local filesystem fallback.");
+  }
+} catch (err) {
+  console.error("Failed to initialize Firebase Client SDK on server:", err);
 }
 
 async function startServer() {
@@ -174,69 +192,164 @@ async function startServer() {
   // Parse JSON payloads
   app.use(express.json({ limit: "20mb" }));
 
-  // 1. GET Portfolio Data
-  app.get("/api/portfolio", (req, res) => {
+  // 1. GET Portfolio Data (Loads from cloud Firestore with local backup fallback)
+  app.get("/api/portfolio", async (req, res) => {
     try {
+      if (db) {
+        try {
+          const docRef = doc(db, "portfolio", "data");
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data() || {};
+            // Self-healing merge to guarantee client never receives incomplete schemas
+            const mergedData = {
+              ...DEFAULT_PORTFOLIO_DATA,
+              ...data,
+              profile: {
+                ...DEFAULT_PORTFOLIO_DATA.profile,
+                ...(data.profile || {})
+              }
+            };
+
+            // If the database document is missing key collections, write back healed data
+            if (!data.projects || !data.skills || !data.experiences || !data.profile?.socialLinks) {
+              console.log("Detected incomplete portfolio entry in Firestore. Automatically healing database...");
+              try {
+                await setDoc(docRef, mergedData);
+              } catch (writeErr) {
+                console.error("Failed to heal incomplete Firestore document:", writeErr);
+              }
+            }
+
+            // Sync local backup file
+            fs.writeFileSync(PORTFOLIO_FILE, JSON.stringify(mergedData, null, 2), "utf8");
+            return res.json(mergedData);
+          } else {
+            // Seed Firestore with default data
+            await setDoc(docRef, DEFAULT_PORTFOLIO_DATA);
+            return res.json(DEFAULT_PORTFOLIO_DATA);
+          }
+        } catch (firebaseErr) {
+          console.error("Firestore fetch error, pulling from local backup:", firebaseErr);
+        }
+      }
+      
+      // Fallback
       if (fs.existsSync(PORTFOLIO_FILE)) {
-        const fileContent = fs.readFileSync(PORTFOLIO_FILE, "utf8");
-        return res.json(JSON.parse(fileContent));
+        try {
+          const fileContent = fs.readFileSync(PORTFOLIO_FILE, "utf8");
+          const fileData = JSON.parse(fileContent);
+          const mergedData = {
+            ...DEFAULT_PORTFOLIO_DATA,
+            ...fileData,
+            profile: {
+              ...DEFAULT_PORTFOLIO_DATA.profile,
+              ...(fileData.profile || {})
+            }
+          };
+          return res.json(mergedData);
+        } catch (parseErr) {
+          console.error("Failed to parse local portfolio backup file:", parseErr);
+        }
       }
       return res.json(DEFAULT_PORTFOLIO_DATA);
     } catch (e) {
-      console.error("Error reading portfolio file:", e);
+      console.error("Error reading portfolio data:", e);
       return res.status(500).json({ error: "Failed to read portfolio data on server" });
     }
   });
 
-  // 2. POST Portfolio Data Updates (Save changes globally)
-  app.post("/api/portfolio", (req, res) => {
+  // 2. POST Portfolio Data Updates (Saves to cloud Firestore and local file)
+  app.post("/api/portfolio", async (req, res) => {
     try {
       const newData = req.body;
       if (!newData || typeof newData !== "object") {
         return res.status(400).json({ error: "Invalid data format" });
       }
+
+      // Save locally as backup / immediate sync
       fs.writeFileSync(PORTFOLIO_FILE, JSON.stringify(newData, null, 2), "utf8");
+
+      // Save to Firebase Cloud Firestore
+      if (db) {
+        try {
+          const docRef = doc(db, "portfolio", "data");
+          await setDoc(docRef, newData);
+          console.log("Successfully saved portfolio changes to cloud Firestore.");
+        } catch (firebaseErr) {
+          console.error("Failed to save portfolio to Firestore, local backup updated:", firebaseErr);
+        }
+      }
+
       return res.json(newData);
     } catch (e) {
-      console.error("Error saving portfolio file:", e);
+      console.error("Error saving portfolio:", e);
       return res.status(500).json({ error: "Failed to save portfolio data on server" });
     }
   });
 
   // 3. GET Messages Data
-  app.get("/api/messages", (req, res) => {
+  app.get("/api/messages", async (req, res) => {
     try {
+      if (db) {
+        try {
+          const querySnapshot = await getDocs(collection(db, "messages"));
+          const messagesList: any[] = [];
+          querySnapshot.forEach((docSnap) => {
+            messagesList.push(docSnap.data());
+          });
+          // Sort descending by timestamp
+          messagesList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          // Sync local backup
+          fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messagesList, null, 2), "utf8");
+          return res.json(messagesList);
+        } catch (firebaseErr) {
+          console.error("Firestore fetch messages failed, pulling from local backup:", firebaseErr);
+        }
+      }
+
+      // Fallback
       if (fs.existsSync(MESSAGES_FILE)) {
         const fileContent = fs.readFileSync(MESSAGES_FILE, "utf8");
         return res.json(JSON.parse(fileContent));
       }
       return res.json([]);
     } catch (e) {
-      console.error("Error reading messages file:", e);
+      console.error("Error reading messages on server:", e);
       return res.status(500).json({ error: "Failed to read messages" });
     }
   });
 
   // 4. POST Add a New Message/Lead
-  app.post("/api/messages", (req, res) => {
+  app.post("/api/messages", async (req, res) => {
     try {
       const newMessage = req.body;
       if (!newMessage || !newMessage.id) {
-        return res.status(450).json({ error: "Invalid message payload" });
+        return res.status(400).json({ error: "Invalid message payload" });
       }
       
+      // Save locally
       let messagesList = [];
       if (fs.existsSync(MESSAGES_FILE)) {
         const content = fs.readFileSync(MESSAGES_FILE, "utf8");
         messagesList = JSON.parse(content);
       }
-      
-      // Auto-deduplicate by checking existing ID
       if (!messagesList.some((m: any) => m.id === newMessage.id)) {
         messagesList.unshift(newMessage);
       }
-      
       fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messagesList, null, 2), "utf8");
+
+      // Save to Firebase Cloud Firestore
+      if (db) {
+        try {
+          const docRef = doc(db, "messages", newMessage.id);
+          await setDoc(docRef, newMessage);
+          console.log(`Successfully stored message ${newMessage.id} to cloud Firestore.`);
+        } catch (firebaseErr) {
+          console.error("Failed to save message to Firestore, local file updated:", firebaseErr);
+        }
+      }
+
       return res.json(messagesList);
     } catch (e) {
       console.error("Error appending message:", e);
@@ -245,14 +358,50 @@ async function startServer() {
   });
 
   // 5. POST Sync all messages (e.g., mark as read, delete campaigns)
-  app.post("/api/messages/update-all", (req, res) => {
+  app.post("/api/messages/update-all", async (req, res) => {
     try {
       const updatedList = req.body;
       if (!Array.isArray(updatedList)) {
         return res.status(400).json({ error: "Payload must be a valid array" });
       }
       
+      // Save locally
       fs.writeFileSync(MESSAGES_FILE, JSON.stringify(updatedList, null, 2), "utf8");
+
+      // Sync with Firebase Cloud Firestore (Batch write delete/set)
+      if (db) {
+        try {
+          const querySnapshot = await getDocs(collection(db, "messages"));
+          const batch = writeBatch(db);
+
+          const existingIds = new Set<string>();
+          querySnapshot.forEach((docSnap) => {
+            existingIds.add(docSnap.id);
+          });
+
+          const incomingIds = new Set(updatedList.map((m: any) => m.id));
+
+          // Delete those that are no longer in the updated lists
+          existingIds.forEach((id) => {
+            if (!incomingIds.has(id)) {
+              batch.delete(doc(db, "messages", id));
+            }
+          });
+
+          // Set the incoming/adjusted ones
+          updatedList.forEach((msg: any) => {
+            if (msg && msg.id) {
+              batch.set(doc(db, "messages", msg.id), msg);
+            }
+          });
+
+          await batch.commit();
+          console.log("Successfully batch synced messages to cloud Firestore.");
+        } catch (firebaseErr) {
+          console.error("Failed to batch sync messages to Firestore, local updates applied:", firebaseErr);
+        }
+      }
+
       return res.json(updatedList);
     } catch (e) {
       console.error("Error updating messages collection:", e);

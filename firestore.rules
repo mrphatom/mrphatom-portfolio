@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Portfolio data can be read and written publicly
+    match /portfolio/data {
+      allow read, write: if true;
+    }
+
+    // Messages can be created, updated, and listed
+    match /messages/{messageId} {
+      allow read, write: if true;
+    }
+  }
+}

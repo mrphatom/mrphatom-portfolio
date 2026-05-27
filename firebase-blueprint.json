@@ -1,0 +1,40 @@
+{
+  "entities": {
+    "PortfolioData": {
+      "title": "PortfolioData",
+      "description": "The complete customizable data of the developer portfolio including profile, projects, experiences, and skills.",
+      "type": "object",
+      "properties": {
+        "profile": { "type": "object", "description": "The profile details of the developer." },
+        "projects": { "type": "array", "description": "List of project definitions." },
+        "experiences": { "type": "array", "description": "List of professional experience blocks." },
+        "skills": { "type": "array", "description": "List of professional technical and soft skills." }
+      }
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A received contact form message or lead inquiry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "message": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "read": { "type": "boolean" },
+        "spamScore": { "type": "number" }
+      },
+      "required": ["id", "name", "email", "message", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/portfolio/data": {
+      "schema": "PortfolioData",
+      "description": "Singleton document storing the developer's global portfolio customization."
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Inquiries submitted by prospective clients and viewers."
+    }
+  }
+}

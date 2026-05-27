@@ -15,7 +15,6 @@ import { Mail, MapPin, Download, WifiOff, RefreshCw, AlertCircle, Sun, Moon, Mon
 import { playSoftClick, playNavTick, setGlobalMute } from './utils/audio';
 import { triggerHaptic } from './utils/haptics';
 import ThreeDBackground from './components/ThreeDBackground';
-import { jsPDF } from 'jspdf';
 
 export default function App() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
@@ -41,7 +40,15 @@ export default function App() {
     try {
       const stored = localStorage.getItem('portfolio_data');
       if (stored) {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        return {
+          ...portfolioData,
+          ...parsed,
+          profile: {
+            ...portfolioData.profile,
+            ...(parsed.profile || {})
+          }
+        };
       }
     } catch (e) {
       console.error('Failed to parse portfolio_data:', e);
@@ -99,8 +106,16 @@ export default function App() {
         const response = await fetch('/api/portfolio');
         if (response.ok) {
           const remoteData = await response.json();
-          setEditableData(remoteData);
-          localStorage.setItem('portfolio_data', JSON.stringify(remoteData));
+          const merged = {
+            ...portfolioData,
+            ...remoteData,
+            profile: {
+              ...portfolioData.profile,
+              ...(remoteData.profile || {})
+            }
+          };
+          setEditableData(merged);
+          localStorage.setItem('portfolio_data', JSON.stringify(merged));
         }
       } catch (err) {
         console.error('Failed to auto-sync portfolio data from server:', err);
@@ -187,7 +202,9 @@ export default function App() {
     };
 
     const handlePointerDown = (e: PointerEvent) => {
-      const target = (e.target as HTMLElement).closest('a, button, [role="button"]') as HTMLElement;
+      const target = e.target && typeof (e.target as any).closest === 'function'
+        ? (e.target as any).closest('a, button, [role="button"]') as HTMLElement
+        : null;
       if (!target) return;
 
       clearTimer();
@@ -283,7 +300,9 @@ export default function App() {
     };
 
     const handleLinkClick = (e: MouseEvent) => {
-      const target = (e.target as HTMLElement).closest('a, button, [role="button"]') as HTMLElement;
+      const target = e.target && typeof (e.target as any).closest === 'function'
+        ? (e.target as any).closest('a, button, [role="button"]') as HTMLElement
+        : null;
       if (target && target.getAttribute('data-long-pressed') === 'true') {
         e.preventDefault();
         e.stopPropagation();
@@ -296,6 +315,7 @@ export default function App() {
       const target = e.target as HTMLElement;
       if (
         target &&
+        typeof target.closest === 'function' &&
         (target.closest('a') ||
           target.closest('button') ||
           target.closest('[role="button"]') ||
@@ -309,7 +329,7 @@ export default function App() {
 
     const handleSelectStart = (e: Event) => {
       const target = e.target as HTMLElement;
-      if (target && target.closest('a, button, [role="button"]')) {
+      if (target && typeof target.closest === 'function' && target.closest('a, button, [role="button"]')) {
         // Prevent default text selection during deliberate long press interactions
         e.preventDefault();
       }
@@ -402,13 +422,7 @@ export default function App() {
   const [ripplePosition, setRipplePosition] = useState<{ x: number; y: number } | null>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
 
-  const [isOffline, setIsOffline] = useState(() => {
-    try {
-      return !navigator.onLine;
-    } catch {
-      return false;
-    }
-  });
+  const [isOffline, setIsOffline] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [testOutcome, setTestOutcome] = useState<'success' | 'failure' | null>(null);
 
@@ -665,8 +679,9 @@ export default function App() {
     });
   };
 
-  const executeActualResumeDownload = () => {
+  const executeActualResumeDownload = async () => {
     if (profile.resumeUrl === '#' || !profile.resumeUrl) {
+      const { jsPDF } = await import('jspdf');
       const doc = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',

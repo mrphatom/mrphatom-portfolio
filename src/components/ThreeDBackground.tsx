@@ -82,6 +82,12 @@ export default function ThreeDBackground() {
     let basePulse = 0;
 
     const render = () => {
+      // If the document is hidden/backgrounded, pause layout updates to maximize buttery responsiveness/power efficiency
+      if (typeof document !== 'undefined' && document.hidden) {
+        animationFrameId = requestAnimationFrame(render);
+        return;
+      }
+
       // Clear with very slight transparency to prevent trails while staying snappy
       ctx.clearRect(0, 0, width, height);
 

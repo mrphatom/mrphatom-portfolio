@@ -36,6 +36,37 @@ export default function AdminPanel({ currentData, onSave, onClose }: AdminPanelP
   });
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
+  const [authStatusMessage, setAuthStatusMessage] = useState('');
+
+  // Auto-logout after 5 minutes of inactivity
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let timeoutId: any;
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        handleLogout('You have been automatically logged out due to inactivity.');
+      }, 5 * 60 * 1000); // 5 minutes inactivity
+    };
+
+    // Initialize timer
+    resetTimer();
+
+    // Listen to user interactions to reset the idle timer
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach((name) => {
+      window.addEventListener(name, resetTimer, { passive: true });
+    });
+
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach((name) => {
+        window.removeEventListener(name, resetTimer);
+      });
+    };
+  }, [isAuthenticated]);
 
   // Draft Data State
   const [draftData, setDraftData] = useState<PortfolioData>(() => JSON.parse(JSON.stringify(currentData)));
@@ -184,6 +215,7 @@ export default function AdminPanel({ currentData, onSave, onClose }: AdminPanelP
   // Authenticate logic
   const handleLogin = (e: FormEvent) => {
     e.preventDefault();
+    setAuthStatusMessage('');
     const envPassword = (import.meta as any).env?.VITE_ADMIN_PASSWORD || 'admin123';
     
     if (password === envPassword) {
@@ -200,8 +232,11 @@ export default function AdminPanel({ currentData, onSave, onClose }: AdminPanelP
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = (reason?: string) => {
     setIsAuthenticated(false);
+    if (reason) {
+      setAuthStatusMessage(reason);
+    }
     try {
       sessionStorage.removeItem('admin_authenticated');
     } catch (e) {
@@ -448,10 +483,14 @@ export default function AdminPanel({ currentData, onSave, onClose }: AdminPanelP
                 className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-white font-mono placeholder-zinc-700 focus:outline-hidden focus:border-blue-500 transition-colors"
                 autoFocus
               />
-              <p className="mt-1.5 text-[10px] text-zinc-500 font-mono">
-                Hint: The default environment key is <code className="text-blue-400">admin123</code>.
-              </p>
             </div>
+
+            {authStatusMessage && (
+              <div className="flex items-center gap-2 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-400 text-xs font-mono">
+                <ShieldAlert size={14} className="shrink-0 text-amber-500 animate-pulse" />
+                <span>{authStatusMessage}</span>
+              </div>
+            )}
 
             {authError && (
               <div className="flex items-center gap-2 p-3 rounded-lg border border-red-500/10 bg-red-500/5 text-red-400 text-xs">
