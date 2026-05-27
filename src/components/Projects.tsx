@@ -108,6 +108,102 @@ export default function Projects({ projects }: ProjectsProps) {
     return matchesTag && matchesSearch;
   });
 
+  // Handle keyboard arrow navigation through project grid
+  const handleCardKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, project: Project, index: number) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setActiveProject(project);
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const allCards = Array.from(document.querySelectorAll('#project-grid-container [data-project-card]')) as HTMLDivElement[];
+      if (allCards.length === 0) return;
+
+      let targetIndex = index;
+      const isGridSingleColumn = window.innerWidth < 768; // Tailwind md breakpoint is 768px
+
+      if (e.key === 'ArrowRight') {
+        targetIndex = (index + 1) % allCards.length;
+      } else if (e.key === 'ArrowLeft') {
+        targetIndex = (index - 1 + allCards.length) % allCards.length;
+      } else if (e.key === 'ArrowDown') {
+        if (isGridSingleColumn) {
+          targetIndex = (index + 1) % allCards.length;
+        } else {
+          targetIndex = index + 2;
+          if (targetIndex >= allCards.length) {
+            targetIndex = index; // Pin to bottom boundary
+          }
+        }
+      } else if (e.key === 'ArrowUp') {
+        if (isGridSingleColumn) {
+          targetIndex = (index - 1 + allCards.length) % allCards.length;
+        } else {
+          targetIndex = index - 2;
+          if (targetIndex < 0) {
+            targetIndex = index; // Pin to top boundary
+          }
+        }
+      }
+
+      const targetCard = allCards[targetIndex];
+      if (targetCard) {
+        targetCard.focus();
+      }
+    }
+  };
+
+  // Keyboard accessibility and focus trapping inside Details dialog modal
+  useEffect(() => {
+    if (!activeProject) return;
+
+    // Shift focus inside the modal initially when opened
+    const timer = setTimeout(() => {
+      const closeBtn = document.getElementById('close-spec-modal-btn');
+      if (closeBtn) {
+        closeBtn.focus();
+      }
+    }, 60);
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setActiveProject(null);
+        return;
+      }
+
+      if (e.key === 'Tab') {
+        const modal = document.getElementById('project-spec-modal');
+        if (!modal) return;
+
+        // Collect all natively focusable nodes within container
+        const focusableSelectors = 'a[href], button, input, textarea, select, [tabindex]:not([tabindex="-1"])';
+        const focusableElements = Array.from(modal.querySelectorAll(focusableSelectors)) as HTMLElement[];
+        
+        if (focusableElements.length === 0) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [activeProject]);
+
   return (
     <section
       id="work"
@@ -217,7 +313,7 @@ export default function Projects({ projects }: ProjectsProps) {
             className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8"
           >
             <AnimatePresence mode="popLayout">
-            {filteredProjects.map((project) => (
+            {filteredProjects.map((project, index) => (
               <motion.div
                 key={project.id}
                 layout
@@ -228,7 +324,16 @@ export default function Projects({ projects }: ProjectsProps) {
                 transition={{ duration: 0.45, ease: 'easeOut' }}
                 className="h-full"
               >
-                <Tilt className="group relative flex flex-col h-full bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200/80 dark:border-zinc-805 overflow-hidden transition-all hover:shadow-md hover:border-zinc-350 dark:hover:border-zinc-700">
+                <div
+                  data-project-card
+                  data-project-index={index}
+                  tabIndex={0}
+                  onClick={() => setActiveProject(project)}
+                  onKeyDown={(e) => handleCardKeyDown(e, project, index)}
+                  className="group relative flex flex-col h-full outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-blue-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950 rounded-xl cursor-pointer"
+                  aria-label={`Project: ${project.title}. Role: ${project.role}. Press Enter or Space to view details.`}
+                >
+                  <Tilt className="group relative flex flex-col h-full bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200/80 dark:border-zinc-805 overflow-hidden transition-all hover:shadow-md hover:border-zinc-350 dark:hover:border-zinc-700">
                   {/* Simulated Custom Live Mockup Panel (Aesthetic Header) */}
                   <div className="relative aspect-video w-full p-4 bg-zinc-100 dark:bg-zinc-950/80 border-b border-zinc-200/50 dark:border-zinc-850/50 flex items-center justify-center overflow-hidden">
                     <div className="w-full h-full transform group-hover:scale-102 transition-transform duration-500">
@@ -314,7 +419,8 @@ export default function Projects({ projects }: ProjectsProps) {
                     </div>
                   </div>
                 </Tilt>
-              </motion.div>
+              </div>
+            </motion.div>
             ))}
           </AnimatePresence>
         </motion.div>

@@ -114,6 +114,11 @@ export default function Contact({ profile }: ContactProps) {
       if (cleanList.length !== messagesList.length) {
         localStorage.setItem('portfolio_received_messages', JSON.stringify(cleanList));
         setStoredMessages(cleanList);
+        fetch('/api/messages/update-all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cleanList),
+        }).catch(err => console.error(err));
         registerActivityLog(`Local database sweep: auto-deleted ${messagesList.length - cleanList.length} leads older than 30 days.`);
       }
     } catch (err) {
@@ -233,6 +238,11 @@ export default function Contact({ profile }: ContactProps) {
       setStoredMessages(updated);
       try {
         localStorage.setItem('portfolio_received_messages', JSON.stringify(updated));
+        fetch('/api/messages/update-all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated),
+        }).catch(err => console.error(err));
       } catch (err) {
         console.error("Failed to mark lead copy as read", err);
       }
@@ -251,6 +261,11 @@ export default function Contact({ profile }: ContactProps) {
     setStoredMessages(updated);
     try {
       localStorage.setItem('portfolio_received_messages', JSON.stringify(updated));
+      fetch('/api/messages/update-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      }).catch(err => console.error(err));
     } catch (err) {
       console.error("Failed to save read state status toggle", err);
     }
@@ -291,23 +306,31 @@ export default function Contact({ profile }: ContactProps) {
 
   // Load message store, logs, and run sweeps on initial mount
   useEffect(() => {
+    const fetchGlobalMessages = async () => {
+      try {
+        const response = await fetch('/api/messages');
+        if (response.ok) {
+          const remoteMsgs = await response.json();
+          setStoredMessages(remoteMsgs);
+          localStorage.setItem('portfolio_received_messages', JSON.stringify(remoteMsgs));
+          executeAutoCleanSweep(remoteMsgs);
+        }
+      } catch (err) {
+        console.error("Failed to sync global messages from server:", err);
+      }
+    };
+
     try {
       // 1. Logs
       const logsJSON = localStorage.getItem('portfolio_admin_activity_log');
       if (logsJSON) {
         setActivityLogs(JSON.parse(logsJSON));
       }
-
-      // 2. Messages
-      const messagesJSON = localStorage.getItem('portfolio_received_messages');
-      if (messagesJSON) {
-        const parsed: Message[] = JSON.parse(messagesJSON);
-        setStoredMessages(parsed);
-        executeAutoCleanSweep(parsed);
-      }
     } catch (e) {
       console.error("Local storage loading error on portfolio admin workspace mount", e);
     }
+
+    fetchGlobalMessages();
   }, [autoCleanEnabled]);
 
   // Real-time validation checks
@@ -397,6 +420,11 @@ export default function Contact({ profile }: ContactProps) {
 
       localStorage.setItem('portfolio_received_messages', JSON.stringify(updatedMessages));
       setStoredMessages(updatedMessages);
+      fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMessage),
+      }).catch(err => console.error(err));
     } catch (err) {
       console.error("Local storage backup error", err);
     }
@@ -458,6 +486,11 @@ export default function Contact({ profile }: ContactProps) {
       localStorage.setItem('portfolio_received_messages', JSON.stringify(filtered));
       setStoredMessages(filtered);
       if (activeMessageId === id) setActiveMessageId(null);
+      fetch('/api/messages/update-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(filtered),
+      }).catch(err => console.error(err));
     } catch (err) {
       console.error("Local storage deletion error", err);
     }

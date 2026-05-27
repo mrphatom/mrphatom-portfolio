@@ -53,11 +53,24 @@ export default function AdminPanel({ currentData, onSave, onClose }: AdminPanelP
   const [expandedProj, setExpandedProj] = useState<string | null>(null);
   const [expandedExp, setExpandedExp] = useState<string | null>(null);
 
-  // Sync messages from local storage on mount and tab switch
-  const loadMessages = () => {
+  // Sync messages from local storage & API on mount and tab switch
+  const loadMessages = async () => {
     try {
-      const stored = localStorage.getItem('portfolio_received_messages') || '[]';
-      const parsed = JSON.parse(stored) as Message[];
+      let parsed: Message[] = [];
+      try {
+        const response = await fetch('/api/messages');
+        if (response.ok) {
+          parsed = await response.json();
+          localStorage.setItem('portfolio_received_messages', JSON.stringify(parsed));
+        } else {
+          const stored = localStorage.getItem('portfolio_received_messages') || '[]';
+          parsed = JSON.parse(stored) as Message[];
+        }
+      } catch (err) {
+        const stored = localStorage.getItem('portfolio_received_messages') || '[]';
+        parsed = JSON.parse(stored) as Message[];
+      }
+
       // sort chronologically by timestamp or date
       parsed.sort((a, b) => {
         const timeA = a.timestamp || 0;
@@ -84,6 +97,11 @@ export default function AdminPanel({ currentData, onSave, onClose }: AdminPanelP
     setAdminMessages(updated);
     try {
       localStorage.setItem('portfolio_received_messages', JSON.stringify(updated));
+      fetch('/api/messages/update-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      }).catch(err => console.error(err));
     } catch (e) {
       console.error(e);
     }
@@ -98,6 +116,11 @@ export default function AdminPanel({ currentData, onSave, onClose }: AdminPanelP
     }
     try {
       localStorage.setItem('portfolio_received_messages', JSON.stringify(updated));
+      fetch('/api/messages/update-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updated),
+      }).catch(err => console.error(err));
     } catch (e) {
       console.error(e);
     }
@@ -109,6 +132,11 @@ export default function AdminPanel({ currentData, onSave, onClose }: AdminPanelP
     setActiveMessageId(null);
     try {
       localStorage.setItem('portfolio_received_messages', '[]');
+      fetch('/api/messages/update-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([]),
+      }).catch(err => console.error(err));
     } catch (e) {
       console.error(e);
     }

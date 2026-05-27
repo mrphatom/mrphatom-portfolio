@@ -81,10 +81,11 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
 
     // Form appropriate multi-layered deck structure following Samsung stack widgets design
     let initialLayers: StackItem[] = [];
-    if (island.type === 'time_spent') {
+    if (island.type === 'glance' && island.projectName === 'social') {
+      // Standalone for 'Connect Profile' when no other glance state element is active
+      initialLayers = [mainCard];
+    } else if (island.type === 'time_spent') {
       initialLayers = [mainCard, connectProfileCard];
-    } else if (island.type === 'glance' && island.projectName === 'social') {
-      initialLayers = [mainCard, timeSpentCard];
     } else {
       initialLayers = [mainCard, timeSpentCard, connectProfileCard];
     }

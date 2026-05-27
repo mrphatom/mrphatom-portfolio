@@ -92,6 +92,30 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Sync portfolio data from global server database
+  useEffect(() => {
+    const syncPortfolio = async () => {
+      try {
+        const response = await fetch('/api/portfolio');
+        if (response.ok) {
+          const remoteData = await response.json();
+          setEditableData(remoteData);
+          localStorage.setItem('portfolio_data', JSON.stringify(remoteData));
+        }
+      } catch (err) {
+        console.error('Failed to auto-sync portfolio data from server:', err);
+      }
+    };
+
+    syncPortfolio();
+
+    // Re-sync on window/tab focus to load changes made in other browsers globally
+    window.addEventListener('focus', syncPortfolio);
+    return () => {
+      window.removeEventListener('focus', syncPortfolio);
+    };
+  }, []);
+
   const [island, setIsland] = useState<{
     type: 'none' | 'theme' | 'redirect_prompt' | 'download_resume_prompt' | 'glance' | 'time_spent';
     themeMode?: 'light' | 'dark' | 'system';
@@ -1199,12 +1223,19 @@ export default function App() {
     return (
       <AdminPanel
         currentData={editableData}
-        onSave={(newData) => {
+        onSave={async (newData) => {
           setEditableData(newData);
           try {
             localStorage.setItem('portfolio_data', JSON.stringify(newData));
+            await fetch('/api/portfolio', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(newData),
+            });
           } catch (e) {
-            console.error(e);
+            console.error('Failed to globally save portfolio data changes:', e);
           }
         }}
         onClose={() => {
