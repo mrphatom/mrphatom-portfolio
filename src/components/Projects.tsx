@@ -7,9 +7,10 @@ import Tilt from './Tilt';
 
 interface ProjectsProps {
   projects: Project[];
+  isLoading?: boolean;
 }
 
-export default function Projects({ projects }: ProjectsProps) {
+export default function Projects({ projects, isLoading }: ProjectsProps) {
   const [selectedTag, setSelectedTag] = useState('All');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -28,9 +29,18 @@ export default function Projects({ projects }: ProjectsProps) {
     const deltaY = e.changedTouches[0].clientY - touchStartY.current;
     const deltaX = e.changedTouches[0].clientX - touchStartX.current;
 
-    // Detect solid, predominantly vertical swipe (both up and down are accepted for maximum fluidity)
-    if (Math.abs(deltaY) > 75 && Math.abs(deltaY) > Math.abs(deltaX)) {
-      setActiveProject(null);
+    // Detect solid, predominantly vertical swipe downwards (ONLY downwards to avoid blocking scroll down)
+    if (deltaY > 75 && deltaY > Math.abs(deltaX)) {
+      // Find the scrollable containers or modal elements and check scroll position
+      const modalElement = document.getElementById('project-spec-modal');
+      const isScrollableScrolled = modalElement && (
+        modalElement.scrollTop > 5 || 
+        Array.from(modalElement.querySelectorAll('.overflow-y-auto')).some(el => (el as HTMLElement).scrollTop > 5)
+      );
+
+      if (!isScrollableScrolled) {
+        setActiveProject(null);
+      }
     }
 
     touchStartY.current = null;
@@ -274,7 +284,32 @@ export default function Projects({ projects }: ProjectsProps) {
         </motion.div>
 
         {/* Dynamic Grid of Cards using Motion */}
-        {filteredProjects.length === 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className="flex flex-col h-full bg-zinc-50 dark:bg-zinc-900/40 rounded-xl border border-zinc-200/80 dark:border-zinc-800/50 overflow-hidden animate-pulse">
+                <div className="aspect-video w-full bg-zinc-250/65 dark:bg-zinc-850/45" />
+                <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
+                  <div>
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="h-5 w-1/2 bg-zinc-200/60 dark:bg-zinc-800/40 rounded-lg" />
+                      <div className="h-4 w-16 bg-zinc-200/60 dark:bg-zinc-800/40 rounded-lg" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-3 w-full bg-zinc-200/60 dark:bg-zinc-800/40 rounded-md" />
+                      <div className="h-3 w-5/6 bg-zinc-200/60 dark:bg-zinc-800/40 rounded-md" />
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 pt-2">
+                    <div className="h-4 w-12 bg-zinc-200/60 dark:bg-zinc-800/40 rounded-full" />
+                    <div className="h-4 w-16 bg-zinc-200/60 dark:bg-zinc-800/40 rounded-full" />
+                    <div className="h-4 w-10 bg-zinc-200/60 dark:bg-zinc-800/40 rounded-full" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredProjects.length === 0 ? (
           <motion.div 
             initial={{ opacity: 0, scale: 0.96, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}

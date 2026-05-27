@@ -4,9 +4,10 @@ import { Experience } from '../types';
 
 interface ExperienceProps {
   experiences: Experience[];
+  isLoading?: boolean;
 }
 
-export default function ExperienceSection({ experiences }: ExperienceProps) {
+export default function ExperienceSection({ experiences, isLoading }: ExperienceProps) {
   // Stagger configurations
   const timelineVariants = {
     hidden: { opacity: 0 },
@@ -47,13 +48,40 @@ export default function ExperienceSection({ experiences }: ExperienceProps) {
 
         {/* Career vertical timeline pathway layout */}
         <div className="relative border-l border-zinc-200 dark:border-zinc-800 ml-4 md:ml-6 pl-8 md:pl-10 space-y-12 py-2">
-          <motion.div
-            variants={timelineVariants}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: '-100px' }}
-          >
-            {experiences.map((exp, index) => (
+          {isLoading ? (
+            <div className="space-y-12">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="relative pb-10 last:pb-0 animate-pulse">
+                  {/* Pin */}
+                  <div className="absolute -left-[41px] md:-left-[49px] top-1.5 z-10 p-1.5 rounded-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800/80 shadow-xs flex items-center justify-center">
+                    <div className="w-2 h-2 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                  </div>
+                  
+                  {/* Card content block */}
+                  <div className="bg-zinc-50 dark:bg-zinc-900/40 p-6 md:p-8 rounded-2xl border border-zinc-200/70 dark:border-zinc-800/50 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="space-y-2 w-full sm:w-1/2">
+                        <div className="h-5 w-2/3 bg-zinc-200 dark:bg-zinc-800/50 rounded-lg" />
+                        <div className="h-3.5 w-1/4 bg-zinc-200 dark:bg-zinc-800/50 rounded-md" />
+                      </div>
+                      <div className="h-5 w-24 bg-zinc-200 dark:bg-zinc-800/50 rounded-full self-start sm:self-center" />
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-3 w-full bg-zinc-200 dark:bg-zinc-800/50 rounded-md" />
+                      <div className="h-3 w-5/6 bg-zinc-200 dark:bg-zinc-800/50 rounded-md" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <motion.div
+              variants={timelineVariants}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: '-100px' }}
+            >
+              {experiences.map((exp, index) => (
               <motion.div
                 key={exp.id}
                 variants={cardVariants}
@@ -111,6 +139,7 @@ export default function ExperienceSection({ experiences }: ExperienceProps) {
               </motion.div>
             ))}
           </motion.div>
+          )}
         </div>
       </div>
     </section>

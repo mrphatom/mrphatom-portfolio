@@ -101,7 +101,8 @@ export default function App() {
 
   // Sync portfolio data from global server database
   useEffect(() => {
-    const syncPortfolio = async () => {
+    let active = true;
+    const syncPortfolio = async (isInitialCall = false) => {
       try {
         const response = await fetch('/api/portfolio');
         if (response.ok) {
@@ -114,20 +115,34 @@ export default function App() {
               ...(remoteData.profile || {})
             }
           };
-          setEditableData(merged);
-          localStorage.setItem('portfolio_data', JSON.stringify(merged));
+          if (active) {
+            setEditableData(merged);
+            localStorage.setItem('portfolio_data', JSON.stringify(merged));
+          }
         }
       } catch (err) {
         console.error('Failed to auto-sync portfolio data from server:', err);
+      } finally {
+        if (isInitialCall && active) {
+          // brief sweet delay for a gorgeous shimmer feel
+          setTimeout(() => {
+            if (active) setIsInitialLoading(false);
+          }, 450);
+        }
       }
     };
 
-    syncPortfolio();
+    syncPortfolio(true);
+
+    const handleFocusSync = () => {
+      syncPortfolio(false);
+    };
 
     // Re-sync on window/tab focus to load changes made in other browsers globally
-    window.addEventListener('focus', syncPortfolio);
+    window.addEventListener('focus', handleFocusSync);
     return () => {
-      window.removeEventListener('focus', syncPortfolio);
+      active = false;
+      window.removeEventListener('focus', handleFocusSync);
     };
   }, []);
 
@@ -425,6 +440,7 @@ export default function App() {
   const [isOffline, setIsOffline] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [testOutcome, setTestOutcome] = useState<'success' | 'failure' | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -575,6 +591,16 @@ export default function App() {
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('focus-project-search'));
         }, 120);
+      } else if (key === 'c') {
+        e.preventDefault();
+        handleScrollToSection('contact');
+        // Defer slightly to allow smooth scroll complete, then focus name input field
+        setTimeout(() => {
+          const nameInput = document.getElementById('name');
+          if (nameInput) {
+            nameInput.focus();
+          }
+        }, 150);
       }
     };
 
@@ -1620,7 +1646,7 @@ export default function App() {
         >
           
           <div id="work">
-            <Projects projects={editableData.projects} />
+            <Projects projects={editableData.projects} isLoading={isInitialLoading} />
           </div>
           
           <div id="skills">
@@ -1628,7 +1654,7 @@ export default function App() {
           </div>
           
           <div id="experience">
-            <ExperienceSection experiences={editableData.experiences} />
+            <ExperienceSection experiences={editableData.experiences} isLoading={isInitialLoading} />
           </div>
           
           <div id="contact">
