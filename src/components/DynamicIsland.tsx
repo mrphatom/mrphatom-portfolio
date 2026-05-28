@@ -360,7 +360,7 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
               <span className="relative inline-flex rounded-full h-2 w-2 bg-[#0a84ff]"></span>
             </div>
             <span className="font-sans font-semibold text-[13px] text-zinc-200">
-              {item.projectName === 'repo' ? 'View Source Code' : item.projectName === 'demo' ? 'Launch Application' : item.projectName === 'resume' ? 'Professional Resume' : item.projectName === 'social' ? 'Connect LinkedIn' : 'Connect Profile'}
+              {item.projectName === 'repo' ? 'View Source Code' : item.projectName === 'demo' ? 'Launch Application' : item.projectName === 'resume' ? 'Professional Resume' : (item.redirectUrl?.startsWith('mailto:') || item.targetName === 'Email Client') ? "Contact 'Benson'" : 'View Profile'}
             </span>
             <ChevronUp size={12} className="opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap ml-1 text-zinc-400 animate-bounce" />
           </div>
@@ -388,7 +388,7 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
                   <span className="h-1.5 w-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]"></span>
                 </div>
                 <h5 className="text-[13px] font-semibold text-white leading-tight mt-0.5">
-                  {item.projectName === 'demo' ? 'Launch Live App' : item.projectName === 'resume' ? 'Get Resumé Document' : item.projectName === 'repo' ? 'Inspect Source' : 'Connect LinkedIn'}
+                  {item.projectName === 'demo' ? 'Launch Live App' : item.projectName === 'resume' ? 'Get Resumé Document' : item.projectName === 'repo' ? 'Inspect Source' : (item.redirectUrl?.startsWith('mailto:') || item.targetName === 'Email Client') ? "Contact 'Benson'" : 'View Profile'}
                 </h5>
                 <p className="text-[11px] font-medium text-zinc-400 mt-1 leading-normal truncate">
                   Target: <span className="text-zinc-200 underline decoration-zinc-500 underline-offset-2">{item.targetName || 'LinkedIn Profile'}</span>

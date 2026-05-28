@@ -15,6 +15,7 @@ import { Mail, MapPin, Download, WifiOff, RefreshCw, AlertCircle, Sun, Moon, Mon
 import { playSoftClick, playNavTick, setGlobalMute } from './utils/audio';
 import { triggerHaptic } from './utils/haptics';
 import ThreeDBackground from './components/ThreeDBackground';
+import MiceOnVenusPlayer from './components/MiceOnVenusPlayer';
 
 export default function App() {
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
@@ -1720,6 +1721,9 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      {/* Cozy low volume Minecraft soundtrack block */}
+      <MiceOnVenusPlayer />
 
     </div>
   );
