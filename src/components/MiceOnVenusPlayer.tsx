@@ -1,25 +1,47 @@
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, Music, Volume2, VolumeX, Disc, Sparkles } from 'lucide-react';
+import { Play, Pause, Music, Volume2, VolumeX, Disc, Sparkles, SkipBack, SkipForward } from 'lucide-react';
 import { playSoftClick, playNavTick } from '../utils/audio';
 
+const PLAYLIST = [
+  {
+    title: "Mice on Venus",
+    artist: "C418",
+    album: "Volume Alpha",
+    url: "https://dn721801.ca.archive.org/0/items/mice-on-venus-vinyl/Mice%20on%20Venus.mp3"
+  },
+  {
+    title: "Sunroof",
+    artist: "Nicky Youre Ft. Dazy",
+    album: "Sunroof - Single",
+    url: "https://files.cvaultx.com/wp-content/uploads/music/2023/01/Nicky_Youre_-_Sunroof_Ft_Dazy_CeeNaija.com_.mp3"
+  }
+];
+
 export default function MiceOnVenusPlayer() {
+  const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.12); // Default soft low volume
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
+  
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const currentTrack = PLAYLIST[currentTrackIndex];
 
+  // Synchronize Audio instance when currentTrackIndex changes
   useEffect(() => {
-    // Lazy Audio Instance Setup
-    const audio = new Audio("https://dn721801.ca.archive.org/0/items/mice-on-venus-vinyl/Mice%20on%20Venus.mp3");
+    // If an audio instance already exists, stop and clean it up
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+
+    const audio = new Audio(currentTrack.url);
     audio.loop = true;
-    audio.volume = volume;
+    audio.volume = isMuted ? 0 : volume;
     audioRef.current = audio;
 
-    // Listeners for updates
     const handleTimeUpdate = () => {
       setCurrentTime(audio.currentTime);
     };
@@ -28,27 +50,30 @@ export default function MiceOnVenusPlayer() {
       setDuration(audio.duration);
     };
 
-    const handleEnded = () => {
-      setIsPlaying(false);
+    const handleInterruption = () => {
+      // Clean sync state interruption if paused externally or stream shifts
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('pause', handleInterruption);
 
-    // Dynamic Island / browser sandbox: audio error handler
-    audio.addEventListener('error', (e) => {
-      console.log("Background music state: Idle/Pending connection or user gesture required.", e);
-    });
+    // If playback is active (or track switch triggered while playing), play the new track automatically
+    if (isPlaying) {
+      audio.play().catch((err) => {
+        console.log("Autoplay blocked for track switch:", err);
+        setIsPlaying(false);
+      });
+    }
 
     return () => {
       audio.pause();
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('pause', handleInterruption);
       audioRef.current = null;
     };
-  }, []);
+  }, [currentTrackIndex]);
 
   // Sync volume state changes
   useEffect(() => {
@@ -56,6 +81,39 @@ export default function MiceOnVenusPlayer() {
       audioRef.current.volume = isMuted ? 0 : volume;
     }
   }, [volume, isMuted]);
+
+  // Handle autoplay on initial mount or upon first user interaction gesture with the page
+  useEffect(() => {
+    const playAttempt = () => {
+      if (audioRef.current && !isPlaying) {
+        audioRef.current.play()
+          .then(() => {
+            setIsPlaying(true);
+            // Clean up interaction triggers once successfully activated
+            window.removeEventListener('click', playAttempt);
+            window.removeEventListener('touchstart', playAttempt);
+          })
+          .catch((err) => {
+            console.log("Autoplay gesture fallback pending.", err);
+          });
+      }
+    };
+
+    // Attempt autoplay immediately with a smooth delayed intro
+    const timer = setTimeout(() => {
+      playAttempt();
+    }, 1200);
+
+    // Safe page interactive listeners to bypass security blocks seamlessly
+    window.addEventListener('click', playAttempt);
+    window.addEventListener('touchstart', playAttempt);
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('click', playAttempt);
+      window.removeEventListener('touchstart', playAttempt);
+    };
+  }, []);
 
   const togglePlayback = () => {
     playSoftClick();
@@ -70,18 +128,23 @@ export default function MiceOnVenusPlayer() {
           setIsPlaying(true);
         })
         .catch((err) => {
-          console.log("Autoplay blocked or stream issue. Retrying upon touch interaction...", err);
-          // Standard browser restriction fallback
-          const forcePlay = () => {
-            if (audioRef.current) {
-              audioRef.current.play();
-              setIsPlaying(true);
-            }
-            window.removeEventListener('click', forcePlay);
-          };
-          window.addEventListener('click', forcePlay);
+          console.log("Failed to play:", err);
         });
     }
+  };
+
+  const handleNextTrack = () => {
+    playNavTick();
+    const nextIndex = (currentTrackIndex + 1) % PLAYLIST.length;
+    setCurrentTrackIndex(nextIndex);
+    setIsPlaying(true);
+  };
+
+  const handlePrevTrack = () => {
+    playNavTick();
+    const prevIndex = (currentTrackIndex - 1 + PLAYLIST.length) % PLAYLIST.length;
+    setCurrentTrackIndex(prevIndex);
+    setIsPlaying(true);
   };
 
   const handleMuteToggle = () => {
@@ -104,7 +167,6 @@ export default function MiceOnVenusPlayer() {
     setCurrentTime(audioRef.current.currentTime);
   };
 
-  // Convert seconds to clean display format (MM:SS)
   const formatTime = (secs: number) => {
     if (isNaN(secs) || secs === 0) return '0:00';
     const minutes = Math.floor(secs / 60);
@@ -174,7 +236,7 @@ export default function MiceOnVenusPlayer() {
                   <Sparkles size={8} className="text-amber-500/80" />
                 </span>
                 <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-250 truncate max-w-[110px]">
-                  {isPlaying ? "Mice on Venus" : "Quiet Nostalgic"}
+                  {isPlaying ? currentTrack.title : "Quiet Nostalgic"}
                 </span>
               </div>
             </motion.div>
@@ -186,7 +248,7 @@ export default function MiceOnVenusPlayer() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.95 }}
               transition={{ type: 'spring', damping: 20, stiffness: 220 }}
-              className="w-68 p-4 pt-3.5 rounded-2xl border border-zinc-200/60 dark:border-zinc-850/70 bg-white/80 dark:bg-[#0c0c0c]/85 backdrop-blur-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.6)] relative overflow-hidden group"
+              className="w-72 p-4 pt-3.5 rounded-2xl border border-zinc-200/60 dark:border-zinc-850/70 bg-white/80 dark:bg-[#0c0c0c]/85 backdrop-blur-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_16px_48px_rgba(0,0,0,0.6)] relative overflow-hidden group"
             >
               {/* Fine decoration lines representing tape/retro design grid */}
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500/10 via-amber-500/15 to-emerald-500/10 animate-pulse" />
@@ -206,11 +268,11 @@ export default function MiceOnVenusPlayer() {
                     <div className="absolute w-2 h-2 rounded-full bg-zinc-400 dark:bg-zinc-500 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                   </motion.div>
                   <div className="flex flex-col">
-                    <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 max-w-[140px] truncate leading-snug">
-                      Mice on Venus
+                    <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 max-w-[150px] truncate leading-snug">
+                      {currentTrack.title}
                     </h4>
-                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono tracking-wider">
-                      C418 • Volume Alpha
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono tracking-wider truncate max-w-[150px]">
+                      {currentTrack.artist} • {currentTrack.album}
                     </p>
                   </div>
                 </div>
@@ -265,24 +327,42 @@ export default function MiceOnVenusPlayer() {
 
               {/* Bottom Row: Controls + Volume */}
               <div className="flex items-center justify-between gap-3 pt-1">
-                {/* Play / Pause CAP BUTTON */}
-                <button
-                  onClick={togglePlayback}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="flex-1 py-1.5 px-3 rounded-lg flex items-center justify-center gap-1.5 border border-zinc-250 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 hover:bg-zinc-100 dark:hover:bg-white/[0.04] text-zinc-900 dark:text-white transition-all cursor-pointer select-none"
-                >
-                  {isPlaying ? (
-                    <>
-                      <Pause size={12} fill="currentColor" />
-                      <span className="text-[11px] font-semibold">Pause</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play size={12} fill="currentColor" className="ml-0.5" />
-                      <span className="text-[11px] font-semibold">Play Music</span>
-                    </>
-                  )}
-                </button>
+                {/* Transport Buttons: Playback with Next/Prev skip */}
+                <div className="flex items-center gap-1.5 flex-1 select-none">
+                  <button
+                    onClick={handlePrevTrack}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-white/[0.04] text-zinc-650 dark:text-zinc-300 transition-colors cursor-pointer"
+                    title="Previous Track"
+                  >
+                    <SkipBack size={12} fill="currentColor" />
+                  </button>
+                  <button
+                    onClick={togglePlayback}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg flex items-center justify-center gap-1.5 border border-zinc-250 dark:border-zinc-800 bg-white dark:bg-zinc-900/40 hover:bg-zinc-100 dark:hover:bg-white/[0.04] text-zinc-900 dark:text-white transition-all cursor-pointer font-semibold text-[11px]"
+                  >
+                    {isPlaying ? (
+                      <>
+                        <Pause size={10} fill="currentColor" />
+                        <span>Pause</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play size={10} fill="currentColor" className="ml-0.5" />
+                        <span>Play</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleNextTrack}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="p-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-100 dark:hover:bg-white/[0.04] text-zinc-650 dark:text-zinc-300 transition-colors cursor-pointer"
+                    title="Next Track"
+                  >
+                    <SkipForward size={12} fill="currentColor" />
+                  </button>
+                </div>
 
                 {/* Volume Capsule Control */}
                 <div 
@@ -310,9 +390,19 @@ export default function MiceOnVenusPlayer() {
                 </div>
               </div>
 
+              {/* Playlist overview index hint helper */}
+              <div className="flex justify-center items-center gap-1 mt-3">
+                {PLAYLIST.map((_, idx) => (
+                  <span 
+                    key={idx} 
+                    className={`h-1 rounded-full transition-all duration-300 ${idx === currentTrackIndex ? 'w-3.5 bg-blue-500' : 'w-1 bg-zinc-300 dark:bg-zinc-800'}`} 
+                  />
+                ))}
+              </div>
+
               {/* Cozy hint text */}
-              <p className="text-[8px] font-mono text-zinc-400 dark:text-zinc-600 text-center tracking-tight mt-3">
-                Press play to activate peaceful nostalgia loop &bull; Vol is capped low
+              <p className="text-[8px] font-mono text-zinc-400 dark:text-zinc-600 text-center tracking-tight mt-1.5">
+                Drag any edge to move &bull; Vol is capped low
               </p>
             </motion.div>
           )}
