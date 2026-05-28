@@ -120,8 +120,18 @@ export default function App() {
             localStorage.setItem('portfolio_data', JSON.stringify(merged));
           }
         }
-      } catch (err) {
-        console.error('Failed to auto-sync portfolio data from server:', err);
+      } catch (err: any) {
+        // Handle common offline or temporary connection errors gracefully without polluting consoles
+        const isNetworkError = err instanceof Error && (
+          err.name === 'TypeError' || 
+          err.message?.toLowerCase().includes('fetch') ||
+          err.message?.toLowerCase().includes('network')
+        );
+        if (isNetworkError) {
+          console.log('Portfolio data auto-sync current state: offline/pending. Utilizing local cache fallback.');
+        } else {
+          console.warn('Portfolio data auto-sync notification:', err);
+        }
       } finally {
         if (isInitialCall && active) {
           // brief sweet delay for a gorgeous shimmer feel
