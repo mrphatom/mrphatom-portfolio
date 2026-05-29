@@ -575,11 +575,12 @@ export default function App() {
   const [ripplePosition, setRipplePosition] = useState<{ x: number; y: number } | null>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
 
-  // Pull to refresh states
+  // Pull to refresh states (strictly mobile touch only)
   const [pullDistance, setPullDistance] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [ptrWave, setPtrWave] = useState<{ x: number; y: number; active: boolean } | null>(null);
+  const [touchCoords, setTouchCoords] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [burstWave, setBurstWave] = useState<{ x: number; y: number; active: boolean } | null>(null);
 
   // Pull-to-Refresh Controller Effect
   useEffect(() => {
@@ -588,50 +589,53 @@ export default function App() {
     let isCandidate = false;
     let currentPulling = false;
 
-    const handlePointerDown = (e: PointerEvent) => {
-      // Only recognize touch dragging or mouse click drags if scrollTop === 0
+    const handleTouchStart = (e: TouchEvent) => {
+      // Strictly mobile/touch only
+      if (e.touches.length !== 1 || isRefreshing) return;
+
       const rightPanel = document.getElementById('right-scroll-panel');
       const isAtTop = rightPanel 
         ? (window.innerWidth >= 1024 ? rightPanel.scrollTop === 0 : window.scrollY === 0)
         : window.scrollY === 0;
 
-      if (!isAtTop || isRefreshing) return;
+      if (!isAtTop) return;
 
-      startY = e.clientY;
-      startX = e.clientX;
+      const touch = e.touches[0];
+      startY = touch.clientY;
+      startX = touch.clientX;
       isCandidate = true;
       currentPulling = false;
+      setTouchCoords({ x: touch.clientX, y: touch.clientY });
     };
 
-    const handlePointerMove = (e: PointerEvent) => {
-      if (!isCandidate) return;
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isCandidate || e.touches.length !== 1) return;
 
-      const deltaY = e.clientY - startY;
-      const deltaX = e.clientX - startX;
+      const touch = e.touches[0];
+      const deltaY = touch.clientY - startY;
+      const deltaX = touch.clientX - startX;
 
-      // Detect deliberate downward drag
+      // Identify downward pull gesture
       if (!currentPulling && deltaY > 10 && deltaY > Math.abs(deltaX)) {
         currentPulling = true;
         setIsPulling(true);
       }
 
       if (currentPulling) {
-        // Prevent default only if actively dragging downward at the top to block system overscrolls
+        // Prevent default browser scroll behaviors (bounce/overscroll reload)
         if (e.cancelable) {
           e.preventDefault();
         }
         const dampened = Math.min(130, Math.pow(Math.max(0, deltaY), 0.88));
         setPullDistance(dampened);
+        setTouchCoords({ x: touch.clientX, y: touch.clientY });
       }
     };
 
-    const handlePointerUp = (e: PointerEvent) => {
+    const handleTouchEnd = (e: TouchEvent) => {
       if (currentPulling) {
-        const finalDeltaY = e.clientY - startY;
-        const dampened = Math.min(130, Math.pow(Math.max(0, finalDeltaY), 0.88));
-
-        if (dampened >= 72) {
-          triggerRefresh(e.clientX, e.clientY);
+        if (pullDistance >= 72) {
+          triggerRefresh();
         } else {
           animateSnapBack();
         }
@@ -641,19 +645,17 @@ export default function App() {
       setIsPulling(false);
     };
 
-    const triggerRefresh = async (clientX: number, clientY: number) => {
+    const triggerRefresh = async () => {
       setIsRefreshing(true);
-      setPullDistance(95);
+      setPullDistance(0); // clear pull distance on trigger so content releases beautifully
 
       try {
         triggerHaptic('medium');
         playNavTick();
       } catch {}
 
-      // Spread circular wave ripple!
-      const burstX = clientX !== undefined && clientX > 0 ? clientX : window.innerWidth / 2;
-      const burstY = clientY !== undefined && clientY > 0 ? clientY : 80;
-      setPtrWave({ x: burstX, y: burstY, active: true });
+      // Spread 3 staggered adaptive blue/grey waves from the top of the screen at the touch coordinate X
+      setBurstWave({ x: touchCoords.x || window.innerWidth / 2, y: 0, active: true });
 
       // Run live auto-sync fetches securely
       try {
@@ -676,45 +678,42 @@ export default function App() {
       }
 
       setTimeout(() => {
-        animateSnapBack(() => {
-          setIsRefreshing(false);
-          setPtrWave(null);
-        });
-      }, 1050); // pleasant duration to appreciate the ripples
+        setIsRefreshing(false);
+        setBurstWave(null);
+      }, 1800); // Ample time for the beautiful waves to complete
     };
 
-    const animateSnapBack = (callback?: () => void) => {
+    const animateSnapBack = () => {
       let currentVal = 0;
       setPullDistance(prev => {
         currentVal = prev;
         return prev;
       });
 
-      const step = currentVal / 10;
+      const step = currentVal / 8;
       const timer = setInterval(() => {
         currentVal -= step;
         if (currentVal <= 1) {
           setPullDistance(0);
           clearInterval(timer);
-          if (callback) callback();
         } else {
           setPullDistance(currentVal);
         }
       }, 16);
     };
 
-    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
-    window.addEventListener('pointermove', handlePointerMove, { passive: false });
-    window.addEventListener('pointerup', handlePointerUp, { passive: true });
-    window.addEventListener('pointercancel', handlePointerUp, { passive: true });
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
     return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [isRefreshing]);
+  }, [isRefreshing, pullDistance, touchCoords, portfolioData]);
 
   const [isOffline, setIsOffline] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
@@ -2041,119 +2040,154 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Floating Pull-to-Refresh Sleek Capsule */}
+      {/* Soft Blue Glassy Circle Following Touch Drag */}
       <AnimatePresence>
-        {(isPulling || isRefreshing) && (
+        {isPulling && pullDistance > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: -45, x: '-50%' }}
-            animate={{ opacity: 1, y: 16 + pullDistance * 0.14, x: '-50%' }}
-            exit={{ opacity: 0, y: -45, x: '-50%' }}
-            transition={{ type: 'spring', damping: 20, stiffness: 280 }}
-            className="fixed top-0 left-1/2 z-[100000] px-4 py-2 rounded-full border border-zinc-200/60 dark:border-zinc-850/60 bg-white/75 dark:bg-[#0c0c0c]/75 backdrop-blur-md shadow-lg select-none pointer-events-none flex items-center gap-2.5 font-mono text-[10px] tracking-wider uppercase font-semibold text-zinc-650 dark:text-zinc-300"
+            initial={{ opacity: 0, scale: 0 }}
+            animate={{ 
+              opacity: 1, 
+              scale: Math.min(1.2, pullDistance / 55),
+              x: touchCoords.x,
+              y: touchCoords.y,
+            }}
+            exit={{ opacity: 0, scale: 0 }}
+            style={{
+              position: 'fixed',
+              left: 0,
+              top: 0,
+              translateX: '-50%',
+              translateY: '-50%',
+              zIndex: 100000,
+            }}
+            className="w-14 h-14 rounded-full border border-sky-400/30 dark:border-sky-300/20 bg-sky-500/10 dark:bg-sky-400/15 backdrop-blur-md shadow-lg shadow-sky-500/5 dark:shadow-sky-400/5 flex items-center justify-center select-none pointer-events-none"
           >
-            {/* Spinning/progress circle */}
-            <div className="relative w-4 h-4 flex items-center justify-center">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                <circle 
-                  className="text-zinc-200 dark:text-zinc-800/40" 
-                  strokeWidth="4" 
-                  stroke="currentColor" 
-                  fill="none" 
-                  cx="18" 
-                  cy="18" 
-                  r="14" 
-                />
-                <circle 
-                  className="text-sky-500 dark:text-sky-400" 
-                  strokeWidth="4" 
-                  strokeDasharray="88"
-                  strokeDashoffset={isRefreshing ? 22 : Math.max(0, 88 - (pullDistance / 72) * 88)}
-                  stroke="currentColor" 
-                  fill="none" 
-                  cx="18" 
-                  cy="18" 
-                  r="14" 
-                  style={{ transition: isRefreshing ? 'none' : 'stroke-dashoffset 0.1s ease-out' }}
-                />
-              </svg>
-              {isRefreshing && (
-                <div className="absolute inset-0 flex items-center justify-center animate-spin">
-                  <div className="w-1 h-1 bg-sky-400 dark:bg-sky-450 rounded-full" />
-                </div>
-              )}
-            </div>
-            
-            <span>
-              {isRefreshing 
-                ? 'Syncing Workspace' 
-                : pullDistance >= 72
-                  ? 'Release to Sync' 
-                  : 'Pull to Sync'
-              }
-            </span>
+            {/* Smoothly rotating indicator icon mirroring drag progress */}
+            <svg 
+              className="w-6 h-6 text-sky-500 dark:text-sky-450 transition-transform duration-75"
+              style={{
+                transform: `rotate(${Math.min(180, (pullDistance / 72) * 180)}deg)`
+              }}
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor" 
+              strokeWidth={2.5}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Minimal Glassy Spinner during Workspace Sync */}
+      <AnimatePresence>
+        {isRefreshing && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, scale: 1, y: 24, x: '-50%' }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            style={{
+              position: 'fixed',
+              left: '50%',
+              zIndex: 100000,
+            }}
+            className="w-11 h-11 rounded-full border border-sky-400/30 dark:border-sky-300/20 bg-sky-500/10 dark:bg-sky-400/15 backdrop-blur-md shadow-lg flex items-center justify-center select-none pointer-events-none"
+          >
+            <div className="w-4 h-4 border-2 border-sky-500 border-t-transparent dark:border-sky-400 dark:border-t-transparent rounded-full animate-spin" />
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Modern Circular Reveal Soft Blue-Grey Wave Ripple Effect */}
       <AnimatePresence>
-        {ptrWave && ptrWave.active && (
+        {burstWave && burstWave.active && (
           <div className="fixed inset-0 z-[100001] pointer-events-none overflow-hidden select-none">
-            {/* Primary Sharp & Fast Wave */}
+            {/* Staggered Ripple Wave 1 (Instant burst) */}
             <motion.div
               style={{
                 position: 'absolute',
-                left: ptrWave.x,
-                top: ptrWave.y,
+                left: burstWave.x,
+                top: 0,
                 width: 10,
                 height: 10,
                 borderRadius: '50%',
                 x: '-50%',
                 y: '-50%',
                 transformOrigin: 'center',
-                filter: 'blur(20px)',
+                filter: 'blur(35px)',
                 background: darkMode
-                  ? 'radial-gradient(circle, rgba(56, 189, 248, 0.4) 0%, rgba(148, 163, 184, 0.15) 50%, rgba(0, 0, 0, 0) 80%)'
-                  : 'radial-gradient(circle, rgba(14, 165, 233, 0.3) 0%, rgba(148, 163, 184, 0.2) 50%, rgba(0, 0, 0, 0) 80%)',
+                  ? 'radial-gradient(circle, rgba(56, 189, 248, 0.45) 0%, rgba(148, 163, 184, 0.18) 45%, rgba(0, 0, 0, 0) 70%)'
+                  : 'radial-gradient(circle, rgba(14, 165, 233, 0.32) 0%, rgba(148, 163, 184, 0.14) 45%, rgba(0, 0, 0, 0) 70%)',
               }}
-              initial={{ scale: 0, opacity: 0.9 }}
+              initial={{ scale: 0, opacity: 0.95 }}
               animate={{ 
-                scale: Math.max(window.innerWidth, window.innerHeight) * 0.18,
-                opacity: [0.9, 0.6, 0]
+                scale: Math.max(window.innerWidth, window.innerHeight) * 0.22,
+                opacity: [0.95, 0.6, 0]
               }}
               exit={{ opacity: 0 }}
               transition={{
-                duration: 0.8,
-                ease: [0.1, 0.8, 0.3, 1]
+                duration: 1.3,
+                ease: [0.1, 0.8, 0.2, 1]
               }}
             />
 
-            {/* Secondary Slow & Deep Wave */}
+            {/* Staggered Ripple Wave 2 (Middle staggered delayed layer) */}
             <motion.div
               style={{
                 position: 'absolute',
-                left: ptrWave.x,
-                top: ptrWave.y,
-                width: 12,
-                height: 12,
+                left: burstWave.x,
+                top: 0,
+                width: 10,
+                height: 10,
                 borderRadius: '50%',
                 x: '-50%',
                 y: '-50%',
                 transformOrigin: 'center',
                 filter: 'blur(45px)',
                 background: darkMode
-                  ? 'radial-gradient(circle, rgba(56, 189, 248, 0.2) 0%, rgba(148, 163, 184, 0.08) 55%, rgba(0, 0, 0, 0) 80%)'
-                  : 'radial-gradient(circle, rgba(14, 165, 233, 0.18) 0%, rgba(148, 163, 184, 0.1) 55%, rgba(0, 0, 0, 0) 80%)',
+                  ? 'radial-gradient(circle, rgba(56, 189, 248, 0.3) 0%, rgba(148, 163, 184, 0.12) 50%, rgba(0, 0, 0, 0) 75%)'
+                  : 'radial-gradient(circle, rgba(14, 165, 233, 0.22) 0%, rgba(148, 163, 184, 0.08) 50%, rgba(0, 0, 0, 0) 75%)',
               }}
-              initial={{ scale: 0, opacity: 0.8 }}
+              initial={{ scale: 0, opacity: 0.85 }}
               animate={{ 
-                scale: Math.max(window.innerWidth, window.innerHeight) * 0.32,
-                opacity: [0.8, 0.3, 0]
+                scale: Math.max(window.innerWidth, window.innerHeight) * 0.28,
+                opacity: [0.85, 0.4, 0]
               }}
               exit={{ opacity: 0 }}
               transition={{
-                duration: 1.4,
-                ease: [0.15, 0.85, 0.35, 1]
+                duration: 1.45,
+                ease: [0.12, 0.82, 0.22, 1],
+                delay: 0.16
+              }}
+            />
+
+            {/* Staggered Ripple Wave 3 (Deep long delayed layer) */}
+            <motion.div
+              style={{
+                position: 'absolute',
+                left: burstWave.x,
+                top: 0,
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                x: '-50%',
+                y: '-50%',
+                transformOrigin: 'center',
+                filter: 'blur(55px)',
+                background: darkMode
+                  ? 'radial-gradient(circle, rgba(56, 189, 248, 0.18) 0%, rgba(148, 163, 184, 0.06) 55%, rgba(0, 0, 0, 0) 80%)'
+                  : 'radial-gradient(circle, rgba(14, 165, 233, 0.12) 0%, rgba(148, 163, 184, 0.04) 55%, rgba(0, 0, 0, 0) 80%)',
+              }}
+              initial={{ scale: 0, opacity: 0.75 }}
+              animate={{ 
+                scale: Math.max(window.innerWidth, window.innerHeight) * 0.35,
+                opacity: [0.75, 0.2, 0]
+              }}
+              exit={{ opacity: 0 }}
+              transition={{
+                duration: 1.6,
+                ease: [0.15, 0.85, 0.25, 1],
+                delay: 0.32
               }}
             />
           </div>
