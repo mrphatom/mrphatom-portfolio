@@ -582,71 +582,82 @@ export default function App() {
   const [touchCoords, setTouchCoords] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [burstWave, setBurstWave] = useState<{ x: number; y: number; active: boolean } | null>(null);
 
+  // Refs to allow the gesture system to run without tearing down event listeners on state updates
+  const startYRef = useRef(0);
+  const startXRef = useRef(0);
+  const isCandidateRef = useRef(false);
+  const currentPullingRef = useRef(false);
+  const pullDistanceRef = useRef(0);
+  const touchCoordsRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const isRefreshingRef = useRef(false);
+
   // Pull-to-Refresh Controller Effect
   useEffect(() => {
-    let startY = 0;
-    let startX = 0;
-    let isCandidate = false;
-    let currentPulling = false;
-
     const handleTouchStart = (e: TouchEvent) => {
       // Strictly mobile/touch only
-      if (e.touches.length !== 1 || isRefreshing) return;
+      if (e.touches.length !== 1 || isRefreshingRef.current) return;
 
       const rightPanel = document.getElementById('right-scroll-panel');
       const isAtTop = rightPanel 
-        ? (window.innerWidth >= 1024 ? rightPanel.scrollTop === 0 : window.scrollY === 0)
-        : window.scrollY === 0;
+        ? (window.innerWidth >= 1024 ? rightPanel.scrollTop <= 0 : window.scrollY <= 0)
+        : window.scrollY <= 0;
 
       if (!isAtTop) return;
 
       const touch = e.touches[0];
-      startY = touch.clientY;
-      startX = touch.clientX;
-      isCandidate = true;
-      currentPulling = false;
+      startYRef.current = touch.clientY;
+      startXRef.current = touch.clientX;
+      isCandidateRef.current = true;
+      currentPullingRef.current = false;
+      
+      touchCoordsRef.current = { x: touch.clientX, y: touch.clientY };
       setTouchCoords({ x: touch.clientX, y: touch.clientY });
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (!isCandidate || e.touches.length !== 1) return;
+      if (!isCandidateRef.current || e.touches.length !== 1) return;
 
       const touch = e.touches[0];
-      const deltaY = touch.clientY - startY;
-      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startYRef.current;
+      const deltaX = touch.clientX - startXRef.current;
 
       // Identify downward pull gesture
-      if (!currentPulling && deltaY > 10 && deltaY > Math.abs(deltaX)) {
-        currentPulling = true;
+      if (!currentPullingRef.current && deltaY > 10 && deltaY > Math.abs(deltaX)) {
+        currentPullingRef.current = true;
         setIsPulling(true);
       }
 
-      if (currentPulling) {
+      if (currentPullingRef.current) {
         // Prevent default browser scroll behaviors (bounce/overscroll reload)
         if (e.cancelable) {
           e.preventDefault();
         }
         const dampened = Math.min(130, Math.pow(Math.max(0, deltaY), 0.88));
+        pullDistanceRef.current = dampened;
         setPullDistance(dampened);
+        
+        touchCoordsRef.current = { x: touch.clientX, y: touch.clientY };
         setTouchCoords({ x: touch.clientX, y: touch.clientY });
       }
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
-      if (currentPulling) {
-        if (pullDistance >= 72) {
+      if (currentPullingRef.current) {
+        if (pullDistanceRef.current >= 72) {
           triggerRefresh();
         } else {
           animateSnapBack();
         }
       }
-      isCandidate = false;
-      currentPulling = false;
+      isCandidateRef.current = false;
+      currentPullingRef.current = false;
       setIsPulling(false);
     };
 
     const triggerRefresh = async () => {
+      isRefreshingRef.current = true;
       setIsRefreshing(true);
+      pullDistanceRef.current = 0;
       setPullDistance(0); // clear pull distance on trigger so content releases beautifully
 
       try {
@@ -655,7 +666,7 @@ export default function App() {
       } catch {}
 
       // Spread 3 staggered adaptive blue/grey waves from the top of the screen at the touch coordinate X
-      setBurstWave({ x: touchCoords.x || window.innerWidth / 2, y: 0, active: true });
+      setBurstWave({ x: touchCoordsRef.current.x || window.innerWidth / 2, y: 0, active: true });
 
       // Run live auto-sync fetches securely
       try {
@@ -678,25 +689,23 @@ export default function App() {
       }
 
       setTimeout(() => {
+        isRefreshingRef.current = false;
         setIsRefreshing(false);
         setBurstWave(null);
       }, 1800); // Ample time for the beautiful waves to complete
     };
 
     const animateSnapBack = () => {
-      let currentVal = 0;
-      setPullDistance(prev => {
-        currentVal = prev;
-        return prev;
-      });
-
-      const step = currentVal / 8;
+      let currentVal = pullDistanceRef.current;
+      const step = Math.max(1, currentVal / 8);
       const timer = setInterval(() => {
         currentVal -= step;
         if (currentVal <= 1) {
+          pullDistanceRef.current = 0;
           setPullDistance(0);
           clearInterval(timer);
         } else {
+          pullDistanceRef.current = currentVal;
           setPullDistance(currentVal);
         }
       }, 16);
@@ -713,7 +722,7 @@ export default function App() {
       window.removeEventListener('touchend', handleTouchEnd);
       window.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [isRefreshing, pullDistance, touchCoords, portfolioData]);
+  }, []);
 
   const [isOffline, setIsOffline] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
