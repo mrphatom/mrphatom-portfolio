@@ -192,6 +192,160 @@ async function startServer() {
   // Parse JSON payloads
   app.use(express.json({ limit: "20mb" }));
 
+  // Proxy & Cache track loader with self-healing failsafe streams to prevent any playback disruption
+  app.get("/api/music/:trackKey.mp3", async (req, res) => {
+    const TRACK_SOURCES: Record<string, { filename: string; primary: string; fallback: string }> = {
+      "mice-on-venus": {
+        filename: "mice_on_venus.mp3",
+        primary: "https://archive.org/download/mice-on-venus-vinyl/Mice%20on%20Venus.mp3",
+        fallback: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+      },
+      "sleeping-city": {
+        filename: "sleeping_city.mp3",
+        primary: "https://drive.google.com/uc?export=download&id=1AH6ezAm0ZDuOo1KlgwXRsb1CeXu-bD_v",
+        fallback: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
+      },
+      "sunroof": {
+        filename: "sunroof.mp3",
+        primary: "https://files.cvaultx.com/wp-content/uploads/music/2023/01/Nicky_Youre_-_Sunroof_Ft_Dazy_CeeNaija.com_.mp3",
+        fallback: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3"
+      }
+    };
+
+    const trackKey = req.params.trackKey;
+    const sourceInfo = TRACK_SOURCES[trackKey];
+
+    if (!sourceInfo) {
+      return res.status(404).json({ error: "Track not found in list" });
+    }
+
+    const TRACK_PATH = path.join(DATA_DIR, sourceInfo.filename);
+
+    // If file is already cached and present in data folder, serve it immediately with range assistance
+    if (fs.existsSync(TRACK_PATH)) {
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Accept-Ranges", "bytes");
+      return res.sendFile(TRACK_PATH);
+    }
+
+    console.log(`Track ${trackKey} not cached yet. Initiating primary down-stream buffer...`);
+    const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36";
+    let responseBuffer: Buffer | null = null;
+
+    try {
+      if (trackKey === "sleeping-city") {
+        // Special Google Drive processing
+        const fileId = "1AH6ezAm0ZDuOo1KlgwXRsb1CeXu-bD_v";
+        const directUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
+        
+        let response = await fetch(directUrl, {
+          headers: { "User-Agent": userAgent }
+        });
+
+        let contentType = response.headers.get("content-type") || "";
+
+        if (response.ok && !contentType.includes("text/html")) {
+          const arrayBuffer = await response.arrayBuffer();
+          responseBuffer = Buffer.from(arrayBuffer);
+        } else {
+          // Fallback confirmation extraction
+          const googleUrl = `https://docs.google.com/uc?export=download&id=${fileId}`;
+          response = await fetch(googleUrl, {
+            headers: { "User-Agent": userAgent }
+          });
+
+          contentType = response.headers.get("content-type") || "";
+          if (contentType.includes("text/html")) {
+            const htmlText = await response.text();
+            let confirmToken = "";
+            const confirmRegexUrl = /confirm=([a-zA-Z0-9_\-]+)/;
+            const matchUrl = htmlText.match(confirmRegexUrl);
+            
+            if (matchUrl && matchUrl[1]) {
+              confirmToken = matchUrl[1];
+            } else {
+              const confirmInputRegex = /name="confirm"\s+value="([a-zA-Z0-9_\-]+)"/i;
+              const matchInput = htmlText.match(confirmInputRegex);
+              if (matchInput && matchInput[1]) {
+                confirmToken = matchInput[1];
+              } else {
+                const confirmInputRegexRev = /value="([a-zA-Z0-9_\-]+)"\s+name="confirm"/i;
+                const matchInputRev = htmlText.match(confirmInputRegexRev);
+                if (matchInputRev && matchInputRev[1]) {
+                  confirmToken = matchInputRev[1];
+                }
+              }
+            }
+
+            if (confirmToken) {
+              const downloadUrl = `https://docs.google.com/uc?export=download&confirm=${confirmToken}&id=${fileId}`;
+              response = await fetch(downloadUrl, {
+                headers: { "User-Agent": userAgent }
+              });
+              if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer();
+                responseBuffer = Buffer.from(arrayBuffer);
+              }
+            }
+          } else if (response.ok) {
+            const arrayBuffer = await response.arrayBuffer();
+            responseBuffer = Buffer.from(arrayBuffer);
+          }
+        }
+      } else {
+        // General Direct download (e.g. Mice on Venus or Sunroof)
+        const response = await fetch(sourceInfo.primary, {
+          headers: { "User-Agent": userAgent }
+        });
+        const contentType = response.headers.get("content-type") || "";
+        
+        if (response.ok && !contentType.includes("text/html")) {
+          const arrayBuffer = await response.arrayBuffer();
+          responseBuffer = Buffer.from(arrayBuffer);
+        } else {
+          throw new Error(`Direct download returned status code ${response.status} or invalid mimetype (${contentType})`);
+        }
+      }
+    } catch (primaryErr: any) {
+      console.warn(`Primary download for ${trackKey} failed or was restricted:`, primaryErr?.message || primaryErr);
+    }
+
+    // Self-healing / Failsafe path: if primary buffer is empty or failed, fetch from high-availability fallback
+    if (!responseBuffer || responseBuffer.length === 0) {
+      try {
+        console.log(`Triggering instant fallback for ${trackKey}: downloading from ${sourceInfo.fallback}`);
+        const fallbackResponse = await fetch(sourceInfo.fallback, {
+          headers: { "User-Agent": userAgent }
+        });
+        if (fallbackResponse.ok) {
+          const arrayBuffer = await fallbackResponse.arrayBuffer();
+          responseBuffer = Buffer.from(arrayBuffer);
+          console.log(`Fallback for ${trackKey} completed and buffered successfully!`);
+        } else {
+          throw new Error(`Fallback target returned status code ${fallbackResponse.status}`);
+        }
+      } catch (fallbackErr: any) {
+        console.error(`Double disruption: Fallback for ${trackKey} also failed:`, fallbackErr);
+        return res.status(500).json({ error: "Failed to load audio resource even on fallback" });
+      }
+    }
+
+    // Cache the buffered sound track to local filesystem disk storage for subsequent uses
+    if (responseBuffer && responseBuffer.length > 0) {
+      try {
+        fs.writeFileSync(TRACK_PATH, responseBuffer);
+        console.log(`Track ${trackKey} has been successfully saved to persistent backend cache.`);
+      } catch (saveErr) {
+        console.warn("Could not save cached audio to local server path, streaming on-the-fly instead.", saveErr);
+      }
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Accept-Ranges", "bytes");
+      return res.end(responseBuffer);
+    } else {
+      return res.status(500).json({ error: "Audio buffer was empty or could not be initialized" });
+    }
+  });
+
   // 1. GET Portfolio Data (Loads from cloud Firestore with local backup fallback)
   app.get("/api/portfolio", async (req, res) => {
     try {

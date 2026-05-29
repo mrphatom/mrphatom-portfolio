@@ -1,45 +1,259 @@
-import { useState, useEffect, useRef, ChangeEvent } from 'react';
+import React, { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, Music, Volume2, VolumeX, Disc, Sparkles, SkipBack, SkipForward } from 'lucide-react';
+import { Play, Pause, Music, Volume2, VolumeX, Disc, Sparkles, SkipBack, SkipForward, GripVertical, Maximize2 } from 'lucide-react';
 import { playSoftClick, playNavTick } from '../utils/audio';
 
+// Dynamic playlist containing same-origin self-healing proxy cache paths
 const PLAYLIST = [
   {
     title: "Mice on Venus",
     artist: "C418",
     album: "Volume Alpha",
-    url: "https://dn721801.ca.archive.org/0/items/mice-on-venus-vinyl/Mice%20on%20Venus.mp3"
+    url: "/api/music/mice-on-venus.mp3"
+  },
+  {
+    title: "Sleeping City",
+    artist: "Laidback Ambient Synth",
+    album: "Ambient Backdrops",
+    url: "/api/music/sleeping-city.mp3"
   },
   {
     title: "Sunroof",
     artist: "Nicky Youre Ft. Dazy",
     album: "Sunroof - Single",
-    url: "https://files.cvaultx.com/wp-content/uploads/music/2023/01/Nicky_Youre_-_Sunroof_Ft_Dazy_CeeNaija.com_.mp3"
+    url: "/api/music/sunroof.mp3"
   }
 ];
+
+// Apple iOS Control Center style corner resizer brackets (glassy jelly-pill tactile look)
+function GlassyCornerBracket() {
+  return (
+    <svg 
+      viewBox="0 0 32 32" 
+      className="w-9 h-9 pointer-events-none drop-shadow-[0_2.5px_5px_rgba(0,0,0,0.22)]"
+    >
+      {/* Thick dark underlying shadow for high contrast on light/dark backgrounds */}
+      <path
+        d="M 4,28 A 24,24 0 0,0 28,4"
+        fill="none"
+        stroke="rgba(0, 0, 0, 0.16)"
+        strokeWidth="7"
+        strokeLinecap="round"
+        className="dark:stroke-black/40"
+      />
+      {/* Translucent white premium frosted-glass pill */}
+      <path
+        d="M 4,28 A 24,24 0 0,0 28,4"
+        fill="none"
+        stroke="rgba(255, 255, 255, 0.42)"
+        strokeWidth="4.8"
+        strokeLinecap="round"
+        className="dark:stroke-white/20"
+      />
+      {/* Solid bright white 3D highlight inner edge */}
+      <path
+        d="M 5.5,26.5 A 21,21 0 0,0 26.5,5.5"
+        fill="none"
+        stroke="rgba(255, 255, 255, 0.85)"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        className="dark:stroke-white/45"
+      />
+    </svg>
+  );
+}
 
 export default function MiceOnVenusPlayer() {
   const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [volume, setVolume] = useState(0.12); // Default soft low volume
+  const [volume, setVolume] = useState(0.12); // Default sweet-spot background level
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
+  // Sizing and state engine for Captain Glance Capsule
+  const [glanceWidth, setGlanceWidth] = useState(220);
+  const [glanceHeight, setGlanceHeight] = useState(44);
+  const [isResizeMode, setIsResizeMode] = useState(false);
+  const [isInteracting, setIsInteracting] = useState(false);
+
+  // Safe manual position coordinate tracking for full drag control
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const positionRef = useRef({ x: 0, y: 0 });
+  const playerElementRef = useRef<HTMLDivElement | null>(null);
+  const dimensionsRef = useRef({ width: 220, height: 44 });
+  const blockClickRef = useRef(false);
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+
+  useEffect(() => {
+    dimensionsRef.current = { width: glanceWidth, height: glanceHeight };
+  }, [glanceWidth, glanceHeight]);
+
+  // Frame-calibrated unified pointer gesture manager for perfect dragging & iOS-style jiggle-free resizing
+  useEffect(() => {
+    let active = true;
+    let cleanupFn: (() => void) | null = null;
+    let longPressTimer: NodeJS.Timeout | null = null;
+
+    const setupListeners = () => {
+      const element = document.getElementById("MiceOnVenusPlayer");
+      if (!element) {
+        if (active) {
+          requestAnimationFrame(setupListeners);
+        }
+        return;
+      }
+
+      let isPressed = false;
+      let mode: 'idle' | 'possible' | 'dragging' | 'resizing' = 'idle';
+      let startX = 0;
+      let startY = 0;
+      let startWidth = 220;
+      let startHeight = 44;
+      let startPosX = positionRef.current.x;
+      let startPosY = positionRef.current.y;
+      let pointerId = -1;
+
+      const onPointerDown = (e: PointerEvent) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+        isPressed = true;
+        pointerId = e.pointerId;
+        mode = 'possible';
+        startX = e.clientX;
+        startY = e.clientY;
+        startWidth = dimensionsRef.current.width;
+        startHeight = dimensionsRef.current.height;
+        startPosX = positionRef.current.x;
+        startPosY = positionRef.current.y;
+        setIsInteracting(true);
+
+        try {
+          element.setPointerCapture(e.pointerId);
+        } catch (err) {}
+
+        longPressTimer = setTimeout(() => {
+          if (mode === 'possible' && !isExpanded) {
+            mode = 'resizing';
+            setIsResizeMode(true);
+            playSoftClick();
+          }
+        }, 500);
+
+        blockClickRef.current = false;
+      };
+
+      const onPointerMove = (e: PointerEvent) => {
+        if (!isPressed || e.pointerId !== pointerId) return;
+
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        if (mode === 'possible') {
+          if (Math.sqrt(dx * dx + dy * dy) > 6) {
+            if (longPressTimer) {
+              clearTimeout(longPressTimer);
+              longPressTimer = null;
+            }
+            mode = 'dragging';
+          }
+        }
+
+        if (mode === 'dragging') {
+          setPosition({
+            x: startPosX + dx,
+            y: startPosY + dy,
+          });
+        } else if (mode === 'resizing') {
+          // Dynamic stretch logic optimized for touch screen and cursors alike
+          const newWidth = Math.max(140, Math.min(320, startWidth + dx));
+          const newHeight = Math.max(38, Math.min(100, startHeight + dy));
+          setGlanceWidth(newWidth);
+          setGlanceHeight(newHeight);
+        }
+      };
+
+      const onPointerUp = (e: PointerEvent) => {
+        if (!isPressed || e.pointerId !== pointerId) return;
+
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+
+        try {
+          element.releasePointerCapture(e.pointerId);
+        } catch (err) {}
+
+        const finalMode = mode;
+        isPressed = false;
+        pointerId = -1;
+        mode = 'idle';
+        setIsInteracting(false);
+
+        if (finalMode === 'resizing' || finalMode === 'dragging') {
+          if (finalMode === 'resizing') {
+            setIsResizeMode(false);
+            playSoftClick();
+          }
+
+          blockClickRef.current = true;
+          setTimeout(() => {
+            blockClickRef.current = false;
+          }, 150);
+        }
+      };
+
+      const onPointerCancel = (e: PointerEvent) => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+        try {
+          element.releasePointerCapture(e.pointerId);
+        } catch (err) {}
+        isPressed = false;
+        pointerId = -1;
+        mode = 'idle';
+        setIsResizeMode(false);
+        setIsInteracting(false);
+      };
+
+      element.addEventListener('pointerdown', onPointerDown);
+      element.addEventListener('pointermove', onPointerMove);
+      element.addEventListener('pointerup', onPointerUp);
+      element.addEventListener('pointercancel', onPointerCancel);
+
+      cleanupFn = () => {
+        element.removeEventListener('pointerdown', onPointerDown);
+        element.removeEventListener('pointermove', onPointerMove);
+        element.removeEventListener('pointerup', onPointerUp);
+        element.removeEventListener('pointercancel', onPointerCancel);
+      };
+    };
+
+    setupListeners();
+
+    return () => {
+      active = false;
+      if (cleanupFn) cleanupFn();
+      if (longPressTimer) clearTimeout(longPressTimer);
+    };
+  }, [isExpanded]);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const barsRef = useRef<HTMLDivElement[]>([]);
+
   const currentTrack = PLAYLIST[currentTrackIndex];
 
-  // Synchronize Audio instance when currentTrackIndex changes
+  // Initialize unified persistent Audio playback safely
   useEffect(() => {
-    // If an audio instance already exists, stop and clean it up
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
-
-    const audio = new Audio(currentTrack.url);
-    audio.loop = true;
-    audio.volume = isMuted ? 0 : volume;
+    const audio = new Audio();
+    audio.loop = false;
     audioRef.current = audio;
 
     const handleTimeUpdate = () => {
@@ -50,87 +264,130 @@ export default function MiceOnVenusPlayer() {
       setDuration(audio.duration);
     };
 
-    const handleInterruption = () => {
-      // Clean sync state interruption if paused externally or stream shifts
+    const handleEnded = () => {
+      // Flow freely from Mice -> Sleeping City -> Sunroof -> Repeat (all over again)
+      setCurrentTrackIndex((prev) => (prev + 1) % PLAYLIST.length);
+      setIsPlaying(true);
+    };
+
+    const handleError = (e: ErrorEvent | Event) => {
+      console.warn("Audio stream encountered an issue or CORS limitation. Self-healing by transitioning to the next track...", e);
+      // Automatically skip forward to recover and preserve background ambiance
+      setTimeout(() => {
+        setCurrentTrackIndex((prev) => (prev + 1) % PLAYLIST.length);
+        setIsPlaying(true);
+      }, 400);
     };
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.addEventListener('pause', handleInterruption);
-
-    // If playback is active (or track switch triggered while playing), play the new track automatically
-    if (isPlaying) {
-      audio.play().catch((err) => {
-        console.log("Autoplay blocked for track switch:", err);
-        setIsPlaying(false);
-      });
-    }
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
 
     return () => {
       audio.pause();
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.removeEventListener('pause', handleInterruption);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
       audioRef.current = null;
     };
-  }, [currentTrackIndex]);
+  }, []);
 
-  // Sync volume state changes
+  // Synchronize Audio properties & play/pause state reactively with zero lag
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // Resolve URL comparison safely
+    const resolvedUrl = currentTrack.url.startsWith('/') 
+      ? window.location.origin + currentTrack.url 
+      : currentTrack.url;
+
+    if (audio.src !== resolvedUrl) {
+      audio.pause();
+      audio.src = currentTrack.url;
+      audio.load();
+    }
+
+    // Sync volume level
+    audio.volume = isMuted ? 0 : volume;
+
+    if (isPlaying) {
+      audio.play().catch((err) => {
+        console.log("Audio play deferred or waiting for user interaction:", err);
+      });
+    } else {
+      audio.pause();
+    }
+  }, [currentTrackIndex, isPlaying]);
+
+  // Sync volume state properties dynamically
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = isMuted ? 0 : volume;
     }
   }, [volume, isMuted]);
 
-  // Handle autoplay on initial mount or upon first user interaction gesture with the page
+  // Safe gesture capture for initial stream launch compatibility
   useEffect(() => {
-    const playAttempt = () => {
-      if (audioRef.current && !isPlaying) {
-        audioRef.current.play()
+    const triggerInteractiveLaunch = () => {
+      const audio = audioRef.current;
+      if (audio && !isPlaying) {
+        audio.play()
           .then(() => {
             setIsPlaying(true);
-            // Clean up interaction triggers once successfully activated
-            window.removeEventListener('click', playAttempt);
-            window.removeEventListener('touchstart', playAttempt);
+            window.removeEventListener('click', triggerInteractiveLaunch);
+            window.removeEventListener('touchstart', triggerInteractiveLaunch);
           })
           .catch((err) => {
-            console.log("Autoplay gesture fallback pending.", err);
+            console.log("Autoplay background pending user gesture.", err);
           });
       }
     };
 
-    // Attempt autoplay immediately with a smooth delayed intro
-    const timer = setTimeout(() => {
-      playAttempt();
+    const delayTimer = setTimeout(() => {
+      triggerInteractiveLaunch();
     }, 1200);
 
-    // Safe page interactive listeners to bypass security blocks seamlessly
-    window.addEventListener('click', playAttempt);
-    window.addEventListener('touchstart', playAttempt);
+    window.addEventListener('click', triggerInteractiveLaunch);
+    window.addEventListener('touchstart', triggerInteractiveLaunch);
 
     return () => {
-      clearTimeout(timer);
-      window.removeEventListener('click', playAttempt);
-      window.removeEventListener('touchstart', playAttempt);
+      clearTimeout(delayTimer);
+      window.removeEventListener('click', triggerInteractiveLaunch);
+      window.removeEventListener('touchstart', triggerInteractiveLaunch);
     };
   }, []);
 
+  // 60FPS high-speed micro rendering animation frame loop
+  useEffect(() => {
+    let animationId: number;
+    const animateVisualizer = () => {
+      const waveSpeed = isPlaying ? 0.007 : 0.0016;
+      const waveTime = Date.now() * waveSpeed;
+      for (let i = 0; i < 16; i++) {
+        const depthMultiplier = isPlaying ? 1.0 : 0.12;
+        const sinFactor = Math.sin(waveTime + i * 0.38) * 38;
+        const cosFactor = Math.cos(waveTime - i * 0.26) * 28;
+        const finalHeight = 12 + Math.max(0, (sinFactor + cosFactor + 38) * depthMultiplier);
+        if (barsRef.current[i]) {
+          barsRef.current[i].style.height = `${Math.min(100, Math.max(8, finalHeight))}%`;
+        }
+      }
+
+      animationId = requestAnimationFrame(animateVisualizer);
+    };
+
+    animateVisualizer();
+    return () => {
+      cancelAnimationFrame(animationId);
+    };
+  }, [isPlaying]);
+
   const togglePlayback = () => {
     playSoftClick();
-    if (!audioRef.current) return;
-
-    if (isPlaying) {
-      audioRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      audioRef.current.play()
-        .then(() => {
-          setIsPlaying(true);
-        })
-        .catch((err) => {
-          console.log("Failed to play:", err);
-        });
-    }
+    setIsPlaying(!isPlaying);
   };
 
   const handleNextTrack = () => {
@@ -177,68 +434,152 @@ export default function MiceOnVenusPlayer() {
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
   const constraintsRef = useRef<HTMLDivElement>(null);
 
+  // Resize Drag Handling for glance capsule (resembles Apple CC modules)
+  // Helper selectors for dynamic UI density
+  const isCompact = glanceWidth < 185;
+  const isExtended = glanceWidth >= 240;
+
   return (
     <div ref={constraintsRef} className="fixed inset-0 pointer-events-none z-[9999] select-none">
-      <motion.div
-        drag
-        dragConstraints={constraintsRef}
-        dragElastic={0.12}
-        dragMomentum={true}
-        whileDrag={{ scale: 1.02, cursor: 'grabbing' }}
-        className="absolute bottom-6 left-6 pointer-events-auto select-none cursor-grab"
+      <div
+        id="MiceOnVenusPlayer"
+        ref={playerElementRef}
+        className={`absolute bottom-6 left-6 pointer-events-auto select-none touch-none ${
+          isResizeMode ? 'cursor-default animate-none' : 'cursor-grab active:cursor-grabbing'
+        }`}
+        style={{
+          transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+          transition: isResizeMode ? 'none' : 'transform 0.08s ease-out'
+        }}
       >
+        {/* Apple iOS-Style Glassy Bracket Handles hugging corners perfectly */}
+        {isResizeMode && !isExpanded && (
+          <>
+            {/* Bottom-Left Glassy Bracket */}
+            <div className="absolute left-[-6px] bottom-[-6px] pointer-events-none scale-x-[-1] z-[9999]">
+              <GlassyCornerBracket />
+            </div>
+            {/* Bottom-Right Glassy Bracket */}
+            <div className="absolute right-[-6px] bottom-[-6px] pointer-events-none z-[9999]">
+              <GlassyCornerBracket />
+            </div>
+          </>
+        )}
+
         <AnimatePresence mode="wait">
           {!isExpanded ? (
-            /* MINIMIZED CAPTAIN CAPSULE */
+            /* MINIMIZED CAPTAIN GLANCE CAPSULE */
             <motion.div
               key="minimized"
               initial={{ opacity: 0, scale: 0.94 }}
-              animate={{ opacity: 1, scale: 1 }}
+              animate={{ 
+                opacity: 1, 
+                scale: 1
+              }}
               exit={{ opacity: 0, scale: 0.94 }}
-              whileHover={{ scale: 1.04 }}
-              onClick={() => {
+              onClick={(e) => {
+                // If clicked, but was actually executing or block is active, do nothing
+                if (blockClickRef.current) {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  return;
+                }
+                if (isResizeMode) return;
                 playNavTick();
                 setIsExpanded(true);
               }}
-              className="flex items-center gap-3.5 pl-3.5 pr-4 py-2.5 rounded-full border border-zinc-200/50 dark:border-zinc-850/80 bg-white/75 dark:bg-black/50 backdrop-blur-xl shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_32px_rgba(0,0,0,0.4)] group transition-all"
+              className={`flex items-center justify-between rounded-[22px] border bg-white/75 dark:bg-black/50 backdrop-blur-xl shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_32px_rgba(0,0,0,0.4)] group overflow-hidden select-none relative touch-none
+                ${isResizeMode 
+                  ? 'resize-mode-active border-zinc-400 dark:border-zinc-700 py-2.5 pl-3 pr-2.5 shadow-md shadow-black/10' 
+                  : 'border-zinc-200/50 dark:border-zinc-850/80 py-2.5 pl-3.5 pr-4 hover:border-zinc-350 dark:hover:border-zinc-700 transition-all duration-300'
+                }`}
+              style={{ 
+                width: `${glanceWidth}px`, 
+                height: `${glanceHeight}px`,
+                transition: isResizeMode 
+                  ? 'width 0.08s ease-out, height 0.08s ease-out' 
+                  : 'width 0.35s cubic-bezier(0.16, 1, 0.3, 1), height 0.35s cubic-bezier(0.16, 1, 0.3, 1)'
+              }}
             >
-              <div className="relative flex items-center justify-center">
-                {isPlaying ? (
-                  /* Glowing Rotating Vinyl Badge */
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
-                    className="w-7 h-7 bg-zinc-900 dark:bg-zinc-100 rounded-full flex items-center justify-center border border-zinc-200 dark:border-zinc-800 shadow-md relative"
+               {/* Left Item: Vinyl Cover Container */}
+              <div className="flex items-center gap-2.5 select-none shrink-0 h-full">
+                <div className="relative flex items-center justify-center">
+                  {isPlaying ? (
+                    <motion.div
+                      animate={isResizeMode ? {} : { rotate: 360 }}
+                      transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                      className="w-7 h-7 bg-zinc-900 dark:bg-zinc-100 rounded-full flex items-center justify-center border border-zinc-200 dark:border-zinc-800 shadow-md relative"
+                    >
+                      <Disc size={13} className="text-white dark:text-zinc-950" />
+                      <div className="absolute w-1.5 h-1.5 rounded-full bg-zinc-350 dark:bg-zinc-500 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                    </motion.div>
+                  ) : (
+                    <div className="w-7 h-7 bg-zinc-100 dark:bg-white/[0.04] rounded-full flex items-center justify-center text-zinc-500 border border-zinc-200/30 dark:border-white/[0.03]">
+                      <Music size={12} className="group-hover:animate-bounce" />
+                    </div>
+                  )}
+ 
+                  {/* Micro sound feedback meter - Frozen/Static when resizing for maximal UI performance */}
+                  {isPlaying && !isResizeMode && (
+                    <div className="absolute -bottom-1 -right-1 flex gap-[1.5px] items-end h-3 px-1 rounded-sm bg-[#000000d0] dark:bg-white/10 backdrop-blur-xs scale-85">
+                      <motion.span animate={{ height: [2, 10, 4, 8, 2] }} transition={{ repeat: Infinity, duration: 1, ease: 'easeInOut' }} className="w-[1.5px] bg-[#0a84ff] rounded-xs" />
+                      <motion.span animate={{ height: [4, 6, 11, 4, 4] }} transition={{ repeat: Infinity, duration: 0.8, ease: 'easeInOut' }} className="w-[1.5px] bg-[#0a84ff] rounded-xs" />
+                    </div>
+                  )}
+                </div>
+ 
+                {/* Info Metadata Block (Hides intelligently if resized super small/compact) */}
+                {!isCompact && (
+                  <div className="flex flex-col items-start text-left select-none max-w-[120px] truncate">
+                    <span className="text-[9px] font-mono tracking-widest text-zinc-400 dark:text-zinc-500 uppercase font-semibold flex items-center gap-1 leading-none">
+                      BG Music
+                      <Sparkles size={8} className="text-amber-500/80" />
+                    </span>
+                    <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-250 truncate mt-[2px] leading-tight">
+                      {isPlaying ? currentTrack.title : "Quiet Mode"}
+                    </span>
+                  </div>
+                )}
+              </div>
+ 
+              {/* Dynamic Island Apple-style controls (Revealed only if sized wide / extended) */}
+              {isExtended && (
+                <div 
+                  className="flex items-center gap-2 shrink-0 select-none mr-2 pl-2 border-l border-zinc-200/40 dark:border-zinc-800/60 h-full"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={togglePlayback}
+                    className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-white/[0.05] text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
+                    title={isPlaying ? "Pause" : "Play"}
                   >
-                    <Disc size={13} className="text-white dark:text-zinc-950" />
-                    <div className="absolute w-1.5 h-1.5 rounded-full bg-zinc-350 dark:bg-zinc-500 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-                  </motion.div>
-                ) : (
-                  /* Steady static music icon holding note */
-                  <div className="w-7 h-7 bg-zinc-100 dark:bg-white/[0.04] rounded-full flex items-center justify-center text-zinc-500 border border-zinc-200/30 dark:border-white/[0.03]">
-                    <Music size={12} className="group-hover:animate-bounce" />
-                  </div>
-                )}
-
-                {/* Little ambient live sound indicator bars */}
-                {isPlaying && (
-                  <div className="absolute -bottom-1 -right-1 flex gap-[1.5px] items-end h-3 px-1 rounded-sm bg-neutral-900/80 dark:bg-white/10 backdrop-blur-xs scale-85">
-                    <motion.span animate={{ height: [2, 10, 4, 8, 2] }} transition={{ repeat: Infinity, duration: 1, ease: 'easeInOut' }} className="w-[1.5px] bg-[#0a84ff] rounded-xs" />
-                    <motion.span animate={{ height: [4, 6, 11, 4, 4] }} transition={{ repeat: Infinity, duration: 0.8, ease: 'easeInOut' }} className="w-[1.5px] bg-[#0a84ff] rounded-xs" />
-                    <motion.span animate={{ height: [2, 11, 3, 9, 2] }} transition={{ repeat: Infinity, duration: 1.2, ease: 'easeInOut' }} className="w-[1.5px] bg-[#0a84ff] rounded-xs" />
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col items-start text-left">
-                <span className="text-[10px] font-mono tracking-widest text-zinc-400 dark:text-zinc-500 uppercase font-semibold flex items-center gap-1">
-                  Background Music
-                  <Sparkles size={8} className="text-amber-500/80" />
-                </span>
-                <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-250 truncate max-w-[110px]">
-                  {isPlaying ? currentTrack.title : "Quiet Nostalgic"}
-                </span>
-              </div>
+                    {isPlaying ? <Pause size={10} fill="currentColor" /> : <Play size={10} fill="currentColor" />}
+                  </button>
+                  <button
+                    onClick={handleNextTrack}
+                    className="p-1 rounded-md hover:bg-zinc-100 dark:hover:bg-white/[0.05] text-zinc-700 dark:text-zinc-300 transition-colors cursor-pointer"
+                    title="Skip Forward"
+                  >
+                    <SkipForward size={10} fill="currentColor" />
+                  </button>
+                </div>
+              )}
+ 
+              {/* Resize Mode active state indicator badge */}
+              {isResizeMode ? (
+                <div 
+                  className="w-5 h-7 rounded-md flex items-center justify-center shrink-0 text-blue-500 select-none pr-0.5 animate-pulse"
+                  title="Long press and drag screen to resize dynamically"
+                >
+                  <GripVertical size={13} className="opacity-80" />
+                </div>
+              ) : (
+                /* Tiny indicator hint on hover to notice expandability */
+                <div className="hidden group-hover:block absolute right-2 text-zinc-400 opacity-60 pointer-events-none transition-all scale-75">
+                  <Maximize2 size={10} />
+                </div>
+              )}
             </motion.div>
           ) : (
             /* EXPANDED DELIGHTFUL CONTROLLER GLASS HUD */
@@ -267,7 +608,7 @@ export default function MiceOnVenusPlayer() {
                     <Disc size={15} className="text-white dark:text-zinc-900" />
                     <div className="absolute w-2 h-2 rounded-full bg-zinc-400 dark:bg-zinc-500 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
                   </motion.div>
-                  <div className="flex flex-col">
+                  <div className="flex flex-col font-sans">
                     <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 max-w-[150px] truncate leading-snug">
                       {currentTrack.title}
                     </h4>
@@ -291,17 +632,25 @@ export default function MiceOnVenusPlayer() {
                 </button>
               </div>
 
-              {/* Simulated Live Audio Waves */}
-              <div className="flex items-center justify-between h-4 bg-zinc-50 dark:bg-zinc-900/60 rounded-md px-2.5 mb-3 select-none">
-                <span className="text-[9px] font-mono font-medium text-zinc-400 dark:text-zinc-500">
-                  {isPlaying ? "Ambient Loop" : "Idle"}
-                </span>
-                <div className="flex items-end gap-0.5 h-3">
-                  <motion.span animate={{ height: isPlaying ? [2, 11, 4, 10, 2] : 2 }} transition={{ repeat: Infinity, duration: 1.1, ease: 'linear' }} className="w-[1.5px] bg-[#0a84ff] rounded-xs" />
-                  <motion.span animate={{ height: isPlaying ? [3, 7, 12, 5, 3] : 2 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }} className="w-[1.5px] bg-[#0a84ff] rounded-xs" />
-                  <motion.span animate={{ height: isPlaying ? [2, 10, 3, 11, 2] : 2 }} transition={{ repeat: Infinity, duration: 1.3, ease: 'linear' }} className="w-[1.5px] bg-[#0a84ff] rounded-xs" />
-                  <motion.span animate={{ height: isPlaying ? [4, 6, 9, 3, 4] : 2 }} transition={{ repeat: Infinity, duration: 0.7, ease: 'linear' }} className="w-[1.5px] bg-[#0a84ff] rounded-xs" />
-                  <motion.span animate={{ height: isPlaying ? [2, 11, 4, 8, 2] : 2 }} transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }} className="w-[1.5px] bg-[#0a84ff] rounded-xs" />
+              {/* Real-Time and Procedural Hybrid Frequency Visualizer */}
+              <div className="flex items-end justify-between gap-[3.5px] h-12 px-2 pb-1.5 pt-4 bg-zinc-50 dark:bg-zinc-900/40 rounded-xl mb-4 relative overflow-hidden select-none border border-zinc-150/50 dark:border-zinc-850/30">
+                <div className="absolute top-1 left-2 flex items-center gap-1 opacity-70">
+                  <Sparkles size={8} className="text-blue-500 animate-pulse" />
+                  <span className="text-[8px] font-mono font-bold tracking-wider uppercase text-zinc-400 dark:text-zinc-500">
+                    Spectrum Feedback {isPlaying ? "• Active" : "• Idle"}
+                  </span>
+                </div>
+                <div className="flex items-end gap-[3.5px] justify-between w-full h-full pt-1">
+                  {Array.from({ length: 16 }).map((_, idx) => (
+                    <div
+                      key={idx}
+                      ref={(el) => { if (el) barsRef.current[idx] = el; }}
+                      className="w-[10px] rounded-full bg-gradient-to-t from-blue-500 via-indigo-500 to-purple-400 dark:from-blue-600 dark:via-indigo-500 dark:to-purple-400 transition-all duration-75 relative group/bar"
+                      style={{ height: '8%' }}
+                    >
+                      <div className="absolute -top-[3px] left-1/2 -translate-x-1/2 w-[3px] h-[3px] rounded-full bg-blue-300 dark:bg-purple-300 opacity-40" />
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -371,7 +720,7 @@ export default function MiceOnVenusPlayer() {
                 >
                   <button
                     onClick={handleMuteToggle}
-                    className="text-zinc-500 hover:text-[#0a84ff] transition-colors cursor-pointer"
+                    className="text-zinc-500 hover:text-[#0a84ff] transition-colors cursor-pointer font-sans"
                     title={isMuted ? "Unmute" : "Mute"}
                   >
                     {isMuted || volume === 0 ? <VolumeX size={12} /> : <Volume2 size={12} />}
@@ -407,7 +756,7 @@ export default function MiceOnVenusPlayer() {
             </motion.div>
           )}
         </AnimatePresence>
-      </motion.div>
+      </div>
     </div>
   );
 }
