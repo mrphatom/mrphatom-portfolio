@@ -91,6 +91,28 @@ export const portfolioData: PortfolioData = {
       codeUrl: "https://github.com/mrphatom/haywhyconstructions",
       demoUrl: "https://github.com/mrphatom/haywhyconstructions",
       featured: false
+    },
+    {
+      id: "dev-nexus",
+      title: "DevNexus Community Board",
+      role: "Creator & Lead Dev",
+      description: "A legacy message board and peer resources sharing repository for bootcamp developers.",
+      longDescription: "A retro-themed message board built using Node.js and simple custom templates. Features basic markdown threads, topic categorizing, and user upvotes, designed to foster resource sharing among entry-level engineers.",
+      image: "dashboard",
+      tags: ["Node.js", "Express", "MongoDB", "EJS Templates"],
+      codeUrl: "https://github.com/mrphatom/devnexus",
+      featured: false
+    },
+    {
+      id: "orbit-timer",
+      title: "Orbit Pomodoro Utility",
+      role: "Maker",
+      description: "A minimalist radial focal clock utilizing clean timer loops and custom sounds.",
+      longDescription: "An elegant, single-view browser dynamic Pomodoro web utility styled inside a clean layout. Implemented using standard HTML5 Canvas clocks, local session states, and custom audio chime warnings on work completion.",
+      image: "canvas",
+      tags: ["HTML5 Canvas", "Tailwind CSS", "Web Audio API"],
+      demoUrl: "https://github.com/mrphatom/orbittimer",
+      featured: false
     }
   ],
   experiences: [

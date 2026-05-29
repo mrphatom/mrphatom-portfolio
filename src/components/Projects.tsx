@@ -1,6 +1,6 @@
 import React, { useState, useEffect, MouseEvent, useRef, TouchEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ExternalLink, Code, FolderOpen, X, ArrowUpRight, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { ExternalLink, Code, FolderOpen, X, ArrowUpRight, ChevronDown, ChevronUp, Sparkles, Archive } from 'lucide-react';
 import { Project } from '../types';
 import ProjectMockup from './ProjectMockup';
 import Tilt from './Tilt';
@@ -112,11 +112,15 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
     };
   }, []);
 
-  // Extract all unique tags dynamically
-  const allTags = ['All', ...Array.from(new Set(projects.flatMap(p => p.tags)))];
+  // Separate projects into high-impact featured spotlight list and archived secondary projects
+  const featuredOnly = projects.filter(p => p.featured === true || p.featured === undefined);
+  const archivedOnly = projects.filter(p => p.featured === false);
 
-  // Filter projects based on both tag selector choice and search input query
-  const filteredProjects = projects.filter(project => {
+  // Extract all unique tags dynamically from featured projects
+  const allTags = ['All', ...Array.from(new Set(featuredOnly.flatMap(p => p.tags)))];
+
+  // Filter featured projects based on tag and search
+  const filteredFeaturedProjects = featuredOnly.filter(project => {
     const matchesTag = selectedTag === 'All' || project.tags.includes(selectedTag);
     const matchesSearch = !searchQuery || (
       project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -126,7 +130,17 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
     return matchesTag && matchesSearch;
   });
 
-  const displayedProjects = isExpanded ? filteredProjects : filteredProjects.slice(0, 6);
+  // Filter archived projects by search term
+  const filteredArchivedProjects = archivedOnly.filter(project => {
+    const matchesSearch = !searchQuery || (
+      project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      project.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+    return matchesSearch;
+  });
+
+  const displayedProjects = isExpanded ? filteredFeaturedProjects : filteredFeaturedProjects.slice(0, 6);
 
   // Handle keyboard arrow navigation through project grid
   const handleCardKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, project: Project, index: number) => {
@@ -335,7 +349,7 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
               </div>
             ))}
           </div>
-        ) : filteredProjects.length === 0 ? (
+        ) : filteredFeaturedProjects.length === 0 ? (
           <motion.div 
             initial={{ opacity: 0, scale: 0.96, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -507,7 +521,7 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
         </motion.div>
       )}
 
-      {filteredProjects.length > 6 && (
+      {filteredFeaturedProjects.length > 6 && (
         <div className="flex justify-center mt-12">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -520,11 +534,128 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
               </>
             ) : (
               <>
-                <span>See More ({filteredProjects.length - 6} remaining)</span>
+                <span>See More ({filteredFeaturedProjects.length - 6} remaining)</span>
                 <ChevronDown size={14} className="group-hover:translate-y-0.5 transition-transform" />
               </>
             )}
           </button>
+        </div>
+      )}
+
+      {/* Dedicated Project Archive Directory */}
+      {archivedOnly.length > 0 && (
+        <div className="mt-20 border-t border-zinc-200/50 dark:border-zinc-900/60 pt-16">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+            <div>
+              <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-400 dark:text-zinc-500 block mb-1">Legacy & secondary works</span>
+              <h3 className="text-xl sm:text-2xl font-display font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                <Archive size={18} className="text-zinc-400 dark:text-zinc-500" />
+                Engineering Archive
+              </h3>
+            </div>
+            <p className="text-xs font-mono font-light text-zinc-500 dark:text-zinc-400">
+              {filteredArchivedProjects.length} {filteredArchivedProjects.length === 1 ? 'project' : 'projects'} indexed
+            </p>
+          </div>
+
+          {filteredArchivedProjects.length === 0 ? (
+            <div className="text-center py-10 border border-dashed border-zinc-250 dark:border-zinc-800 rounded-xl bg-zinc-50/10 dark:bg-zinc-900/10">
+              <p className="text-xs font-mono text-zinc-400 dark:text-zinc-500">No archived projects match the search query</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+              <table className="w-full text-left border-collapse select-none">
+                <thead>
+                  <tr className="border-b border-zinc-200 dark:border-zinc-850 text-zinc-400 dark:text-zinc-500 text-[10px] font-mono uppercase tracking-wider">
+                    <th className="py-3 px-4 font-normal">Project</th>
+                    <th className="py-3 px-4 font-normal hidden md:table-cell">Role</th>
+                    <th className="py-3 px-4 font-normal hidden lg:table-cell">Built With</th>
+                    <th className="py-3 px-4 font-normal text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-150 dark:divide-zinc-900">
+                  {filteredArchivedProjects.map((project, index) => (
+                    <motion.tr
+                      key={project.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: index * 0.04, duration: 0.3 }}
+                      className="group/row hover:bg-zinc-50/50 dark:hover:bg-zinc-900/30 transition-colors"
+                    >
+                      {/* Title & Description Column */}
+                      <td className="py-4 px-4 max-w-sm sm:max-w-md">
+                        <div className="font-display font-medium text-sm text-zinc-900 dark:text-zinc-100 group-hover/row:text-blue-500 dark:group-hover/row:text-blue-400 transition-colors">
+                          {project.title}
+                        </div>
+                        <div className="text-xs font-light text-zinc-500 dark:text-zinc-400 line-clamp-1 mt-0.5">
+                          {project.description}
+                        </div>
+                      </td>
+
+                      {/* Role Column */}
+                      <td className="py-4 px-4 text-xs font-mono text-zinc-650 dark:text-zinc-450 hidden md:table-cell">
+                        {project.role}
+                      </td>
+
+                      {/* Built with Column */}
+                      <td className="py-4 px-4 hidden lg:table-cell">
+                        <div className="flex flex-wrap gap-1">
+                          {project.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="text-[10px] font-mono bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-450 px-1.5 py-0.5 rounded-sm border border-zinc-250/30 dark:border-zinc-800/30"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+
+                      {/* Links / Details Button Column */}
+                      <td className="py-4 px-4 text-right">
+                        <div className="inline-flex items-center gap-3.5 pl-2 justify-end w-full">
+                          <button
+                            onClick={() => setActiveProject(project)}
+                            className="text-xs font-medium text-zinc-800 dark:text-zinc-200 hover:text-blue-500 dark:hover:text-blue-400 transition-colors cursor-pointer"
+                          >
+                            Read Specs
+                          </button>
+                          
+                          <div className="flex gap-2.5">
+                            {project.codeUrl && (
+                              <a
+                                href={project.codeUrl}
+                                onClick={(e) => handleExternalRedirect(e, project.codeUrl!, project.title)}
+                                onMouseEnter={() => handleGlanceStart('repo', project.codeUrl, project.title)}
+                                onMouseLeave={handleGlanceEnd}
+                                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors cursor-pointer"
+                                aria-label={`${project.title} Repository`}
+                              >
+                                <Code size={14} />
+                              </a>
+                            )}
+                            {project.demoUrl && (
+                              <a
+                                href={project.demoUrl}
+                                onClick={(e) => handleExternalRedirect(e, project.demoUrl!, project.title)}
+                                onMouseEnter={() => handleGlanceStart('demo', project.demoUrl, project.title)}
+                                onMouseLeave={handleGlanceEnd}
+                                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-150 transition-colors cursor-pointer"
+                                aria-label={`${project.title} Live App`}
+                              >
+                                <ArrowUpRight size={14} />
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </motion.tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
