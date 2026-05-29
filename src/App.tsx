@@ -1377,6 +1377,7 @@ export default function App() {
           >
             <div className="phantom-scanlines" />
             <div className="phantom-static-noise" />
+            <div className="phantom-transmission-bar" />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: [0, 0.45, 0.15, 0.35, 0], scale: 1 }}
