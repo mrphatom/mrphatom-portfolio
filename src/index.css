@@ -96,8 +96,51 @@ a, button, [role="button"], img {
 
 /* Ghostly Glitch Styles */
 .phantom-glitch-active {
-  animation: phatom-glitch-shake 0.4s steps(3) infinite, phatom-color-flicker 0.28s steps(2) infinite;
+  animation: phatom-glitch-shake 0.4s steps(3) infinite, phatom-color-flicker 0.28s steps(2) infinite, phatom-chromatic-channels 0.2s linear infinite;
   position: relative;
+}
+
+@keyframes phatom-chromatic-channels {
+  0% {
+    text-shadow: 2.5px -1.5px 0 rgba(255, 0, 80, 0.95), -2.5px 1.5px 0 rgba(0, 240, 255, 0.95), 1px 2px 0 rgba(0, 255, 100, 0.7);
+    filter: hue-rotate(8deg) contrast(1.3) saturate(1.4);
+    transform: translate(-1px, 1.5px);
+  }
+  15% {
+    text-shadow: -3px 2px 0 rgba(255, 0, 80, 0.9), 3.5px -2px 0 rgba(0, 240, 255, 0.9), -2px -2px 0 rgba(0, 255, 100, 0.65);
+    filter: hue-rotate(-12deg) contrast(1.1) saturate(1.2);
+    transform: translate(2px, -1px);
+  }
+  30% {
+    text-shadow: 4px -2.5px 0.5px rgba(255, 0, 80, 0.95), -4px 2.5px 0.5px rgba(0, 240, 255, 0.95), 1.5px -3px 0.5px rgba(0, 255, 100, 0.8);
+    filter: hue-rotate(20deg) contrast(1.5) saturate(1.6) brightness(1.1);
+    transform: translate(-1.5px, -2px);
+  }
+  45% {
+    text-shadow: -2.5px -3px 0.5px rgba(255, 0, 80, 0.85), 2.5px 3px 0.5px rgba(0, 240, 255, 0.85), -3px 1.5px 0.5px rgba(0, 255, 100, 0.6);
+    filter: hue-rotate(-5deg) contrast(0.9) saturate(1.1);
+    transform: translate(1.8px, 1px);
+  }
+  60% {
+    text-shadow: 3.5px 4px 0.5px rgba(255, 0, 80, 0.9), -3.5px -4px 0.5px rgba(0, 240, 255, 0.9), 2px -1px 0.5px rgba(0, 255, 100, 0.75);
+    filter: hue-rotate(35deg) contrast(1.4) saturate(1.5) brightness(0.95);
+    transform: translate(-2px, -1.5px);
+  }
+  75% {
+    text-shadow: -4px 2px 0.5px rgba(255, 0, 100, 0.95), 4px -2px 0.5px rgba(0, 240, 255, 0.95), -1.5px 3.5px 0.5px rgba(0, 255, 100, 0.7);
+    filter: hue-rotate(-25deg) contrast(1.6) saturate(1.8) invert(0.02);
+    transform: translate(2.2px, 1.8px);
+  }
+  90% {
+    text-shadow: 2px -2px 0 rgba(255, 0, 80, 0.9), -2px 2px 0 rgba(0, 240, 255, 0.9), 1px -2.5px 0 rgba(0, 255, 100, 0.65);
+    filter: hue-rotate(15deg) contrast(1.2) saturate(1.3);
+    transform: translate(-1px, -1px);
+  }
+  100% {
+    text-shadow: 2.5px -1.5px 0 rgba(255, 0, 80, 0.95), -2.5px 1.5px 0 rgba(0, 240, 255, 0.95), 1px 2px 0 rgba(0, 255, 100, 0.7);
+    filter: hue-rotate(8deg) contrast(1.3) saturate(1.4);
+    transform: translate(-1px, 1.5px);
+  }
 }
 
 .phantom-glitch-active h1,

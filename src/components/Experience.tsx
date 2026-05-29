@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { Briefcase, Calendar, MapPin } from 'lucide-react';
 import { Experience } from '../types';
+import ScrambleText from './ScrambleText';
 
 interface ExperienceProps {
   experiences: Experience[];
@@ -42,7 +43,7 @@ export default function ExperienceSection({ experiences, isLoading }: Experience
         >
           <span className="text-xs uppercase font-mono tracking-widest text-blue-500 block mb-2">My Professional Career</span>
           <h2 className="text-3xl md:text-4xl font-display font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
-            Work Experience
+            <ScrambleText>Work Experience</ScrambleText>
           </h2>
         </motion.div>
 

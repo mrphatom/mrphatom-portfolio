@@ -4,6 +4,7 @@ import { ExternalLink, Code, FolderOpen, X, ArrowUpRight } from 'lucide-react';
 import { Project } from '../types';
 import ProjectMockup from './ProjectMockup';
 import Tilt from './Tilt';
+import ScrambleText from './ScrambleText';
 
 interface ProjectsProps {
   projects: Project[];
@@ -231,7 +232,7 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
           <div>
             <span className="text-xs uppercase font-mono tracking-widest text-blue-500 block mb-2">Curated Case Studies</span>
             <h2 className="text-3xl md:text-4xl font-display font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
-              Selected Projects
+              <ScrambleText>Selected Projects</ScrambleText>
             </h2>
           </div>
 

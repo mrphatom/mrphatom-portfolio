@@ -16,6 +16,7 @@ import { playSoftClick, playNavTick, setGlobalMute, playPhantomGlitchSound } fro
 import { triggerHaptic } from './utils/haptics';
 import ThreeDBackground from './components/ThreeDBackground';
 import MiceOnVenusPlayer from './components/MiceOnVenusPlayer';
+import ScrambleText from './components/ScrambleText';
 
 export default function App() {
   const [glitchActive, setGlitchActive] = useState(false);
@@ -28,21 +29,33 @@ export default function App() {
       clearTimeout(glitchTimerRef.current);
     }
     
-    // Play dynamic haptic pattern and cyber-glitch sound frequencies
+    // Play an intense, physically jarring error-burst haptic cycle
     triggerHaptic('heavy');
     setTimeout(() => {
-      try { triggerHaptic('medium'); } catch {}
-    }, 120);
+      try { triggerHaptic('error'); } catch {} // Rapid stutter burst [30, 50, 30, 50]
+    }, 80);
+    setTimeout(() => {
+      try { triggerHaptic('double'); } catch {} 
+    }, 280);
     setTimeout(() => {
       try { triggerHaptic('heavy'); } catch {}
-    }, 320);
+    }, 450);
     
     playPhantomGlitchSound();
     setGlitchActive(true);
+
+    // Broadcast system-wide start signal
+    try {
+      window.dispatchEvent(new CustomEvent('phantom-glitch-start'));
+    } catch {}
     
     glitchTimerRef.current = setTimeout(() => {
       setGlitchActive(false);
       glitchTimerRef.current = null;
+      // Broadcast system-wide end signal
+      try {
+        window.dispatchEvent(new CustomEvent('phantom-glitch-end'));
+      } catch {}
     }, 1600);
   };
 
@@ -1618,7 +1631,9 @@ export default function App() {
               className="text-5xl sm:text-6xl font-display font-medium leading-[0.95] tracking-tight text-zinc-900 dark:text-white cursor-pointer select-none active:scale-[0.98] transition-transform duration-200 hover:text-zinc-600 dark:hover:text-zinc-300"
               title="Triple click/tap me for the secret phantom glitch..."
             >
-              {profile.headingLine1 || "Creative"}<br />{profile.headingLine2 || "Developer"}
+              <ScrambleText>{profile.headingLine1 || "Creative"}</ScrambleText>
+              <br />
+              <ScrambleText>{profile.headingLine2 || "Developer"}</ScrambleText>
             </h1>
 
             {/* Subtext description */}

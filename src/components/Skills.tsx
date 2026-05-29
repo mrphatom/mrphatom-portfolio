@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Flame, FileCode, Layers, Palette, Sparkles, Cpu, Layout, PenTool, Box, Activity, Terminal, Network, GitBranch, BarChart2 } from 'lucide-react';
 import { SkillItem } from '../types';
+import ScrambleText from './ScrambleText';
 
 interface SkillsProps {
   skills: SkillItem[];
@@ -91,7 +92,7 @@ export default function Skills({ skills }: SkillsProps) {
           <div>
             <span className="text-xs uppercase font-mono tracking-widest text-blue-500 block mb-2">Core Competencies</span>
             <h2 className="text-3xl md:text-4xl font-display font-bold text-zinc-900 dark:text-zinc-50 tracking-tight">
-              Skills & Technologies
+              <ScrambleText>Skills & Technologies</ScrambleText>
             </h2>
           </div>
 

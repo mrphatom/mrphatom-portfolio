@@ -2,6 +2,7 @@ import { useState, useEffect, FormEvent, MouseEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mail, MessageSquare, Send, CheckCircle2, Inbox, Trash2, Search, ExternalLink, ShieldCheck, AlertCircle, Lock, Unlock, KeyRound, Clock, Settings, History, Check, Eye, EyeOff } from 'lucide-react';
 import { Profile } from '../types';
+import ScrambleText from './ScrambleText';
 
 interface ContactProps {
   profile: Profile;
@@ -542,7 +543,7 @@ export default function Contact({ profile }: ContactProps) {
                 id="contact-heading"
                 className="text-3xl md:text-4xl font-display font-bold text-zinc-900 dark:text-zinc-50 tracking-tight select-none"
               >
-                Get in Touch
+                <ScrambleText>Get in Touch</ScrambleText>
               </h2>
               {/* Subtle visual indicator portal to access local leads submissions inside admin panel */}
               <button
