@@ -12,12 +12,55 @@ import NotFound from './components/NotFound';
 import AdminPanel from './components/AdminPanel';
 import { PortfolioData } from './types';
 import { Mail, MapPin, Download, WifiOff, RefreshCw, AlertCircle, Sun, Moon, Monitor } from 'lucide-react';
-import { playSoftClick, playNavTick, setGlobalMute } from './utils/audio';
+import { playSoftClick, playNavTick, setGlobalMute, playPhantomGlitchSound } from './utils/audio';
 import { triggerHaptic } from './utils/haptics';
 import ThreeDBackground from './components/ThreeDBackground';
 import MiceOnVenusPlayer from './components/MiceOnVenusPlayer';
 
 export default function App() {
+  const [glitchActive, setGlitchActive] = useState(false);
+  const typedSequenceRef = useRef<string>('');
+  const glitchTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastTapRef = useRef<number[]>([]);
+
+  const triggerGlitch = () => {
+    if (glitchTimerRef.current) {
+      clearTimeout(glitchTimerRef.current);
+    }
+    
+    // Play dynamic haptic pattern and cyber-glitch sound frequencies
+    triggerHaptic('heavy');
+    setTimeout(() => {
+      try { triggerHaptic('medium'); } catch {}
+    }, 120);
+    setTimeout(() => {
+      try { triggerHaptic('heavy'); } catch {}
+    }, 320);
+    
+    playPhantomGlitchSound();
+    setGlitchActive(true);
+    
+    glitchTimerRef.current = setTimeout(() => {
+      setGlitchActive(false);
+      glitchTimerRef.current = null;
+    }, 1600);
+  };
+
+  const handleCreativeDeveloperTap = () => {
+    const now = Date.now();
+    // 550ms window is ideal for triple tap detection on mobile screens
+    const recentTaps = [...lastTapRef.current, now].filter(t => now - t < 550);
+    lastTapRef.current = recentTaps;
+    
+    // Provide an instantaneous premium tactile click/tap feel on every tap!
+    try { triggerHaptic('light'); } catch {}
+
+    if (recentTaps.length >= 3) {
+      triggerGlitch();
+      lastTapRef.current = [];
+    }
+  };
+
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>(() => {
     try {
       const storedThemeMode = localStorage.getItem('theme_mode');
@@ -620,6 +663,28 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [themeMode]);
+
+  // Ghostly Glitch "PHATOM" global cheat code keyboard tracker
+  useEffect(() => {
+    const handleGlitchScan = (e: KeyboardEvent) => {
+      // Ignore keys that are not single-character keypress events
+      if (e.key.length !== 1 || e.ctrlKey || e.altKey || e.metaKey) return;
+      
+      const char = e.key.toUpperCase();
+      const nextSequence = (typedSequenceRef.current + char).slice(-6);
+      typedSequenceRef.current = nextSequence;
+      
+      if (nextSequence === 'PHATOM') {
+        triggerGlitch();
+        typedSequenceRef.current = '';
+      }
+    };
+
+    window.addEventListener('keydown', handleGlitchScan);
+    return () => {
+      window.removeEventListener('keydown', handleGlitchScan);
+    };
+  }, []);
 
   // Section Tracking Scroll Event Listener
   useEffect(() => {
@@ -1298,8 +1363,30 @@ export default function App() {
   }
 
   return (
-    <div className="w-screen min-h-screen bg-zinc-100/40 dark:bg-[#060606] text-zinc-800 dark:text-zinc-100 selection:bg-zinc-200 dark:selection:bg-zinc-800 selection:text-zinc-900 transition-colors duration-300 md:p-3 lg:p-4 xl:p-6 overflow-x-hidden lg:h-screen lg:overflow-hidden flex items-center justify-center">
+    <div className={`w-screen min-h-screen bg-zinc-100/40 dark:bg-[#060606] text-zinc-800 dark:text-zinc-100 selection:bg-zinc-200 dark:selection:bg-zinc-800 selection:text-zinc-900 transition-colors duration-300 md:p-3 lg:p-4 xl:p-6 overflow-x-hidden lg:h-screen lg:overflow-hidden flex items-center justify-center ${glitchActive ? 'phantom-glitch-active' : ''}`}>
       
+      {/* Ghostly scanlines and analog digital noise layers animated via motion for supreme fluid experience */}
+      <AnimatePresence>
+        {glitchActive && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            className="fixed inset-0 z-[100021] pointer-events-none"
+          >
+            <div className="phantom-scanlines" />
+            <div className="phantom-static-noise" />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: [0, 0.45, 0.15, 0.35, 0], scale: 1 }}
+              transition={{ duration: 1.5, times: [0, 0.08, 0.15, 0.22, 1], ease: "linear" }}
+              className="absolute inset-0 flex items-center justify-center bg-cyan-500/5 mix-blend-color-dodge"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Offline Page Overlay */}
       <AnimatePresence>
         {isOffline && (
@@ -1524,8 +1611,12 @@ export default function App() {
               <span>{profile.location}</span>
             </div>
 
-            {/* Signature Title Heading */}
-            <h1 className="text-5xl sm:text-6xl font-display font-medium leading-[0.95] tracking-tight text-zinc-900 dark:text-white">
+            {/* Signature Title Heading (Triple-tap/click triggers Ghostly Glitch) */}
+            <h1 
+              onClick={handleCreativeDeveloperTap}
+              className="text-5xl sm:text-6xl font-display font-medium leading-[0.95] tracking-tight text-zinc-900 dark:text-white cursor-pointer select-none active:scale-[0.98] transition-transform duration-200 hover:text-zinc-600 dark:hover:text-zinc-300"
+              title="Triple click/tap me for the secret phantom glitch..."
+            >
               {profile.headingLine1 || "Creative"}<br />{profile.headingLine2 || "Developer"}
             </h1>
 
