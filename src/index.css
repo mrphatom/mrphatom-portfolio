@@ -24,6 +24,11 @@ html {
   scroll-padding-top: 80px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior-y: contain;
+}
+
+body {
+  overscroll-behavior-y: contain;
 }
 
 /* Suppress browser touch callout overlay/popup menus during long press events on links/interactives */

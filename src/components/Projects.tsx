@@ -1,6 +1,6 @@
 import React, { useState, useEffect, MouseEvent, useRef, TouchEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ExternalLink, Code, FolderOpen, X, ArrowUpRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { ExternalLink, Code, FolderOpen, X, ArrowUpRight, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { Project } from '../types';
 import ProjectMockup from './ProjectMockup';
 import Tilt from './Tilt';
@@ -16,6 +16,7 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
+  const [ambientLighting, setAmbientLighting] = useState(false);
 
   // Reset expansion state when filters change
   useEffect(() => {
@@ -271,7 +272,7 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
             </div>
 
             {/* Filtering buttons */}
-            <div className="flex flex-wrap gap-1.5 max-w-xl">
+            <div className="flex flex-wrap items-center gap-1.5 max-w-xl">
               {allTags.map((tag) => {
                 const isActive = selectedTag === tag;
                 return (
@@ -288,6 +289,22 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
                   </button>
                 );
               })}
+
+              <div className="h-4 w-px bg-zinc-250 dark:bg-zinc-800 mx-1 hidden sm:block" />
+
+              {/* Ambient Glow Switch Toggle */}
+              <button
+                onClick={() => setAmbientLighting(!ambientLighting)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-mono transition-all cursor-pointer select-none border ${
+                  ambientLighting 
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:bg-amber-400/10 dark:border-amber-400/25 dark:text-amber-400 shadow-xs'
+                    : 'bg-zinc-50 border-zinc-200 text-zinc-500 hover:bg-zinc-100 hover:text-amber-500 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-850 dark:hover:text-amber-400'
+                }`}
+                aria-label="Toggle ambient lighting mode"
+              >
+                <Sparkles size={11} className={ambientLighting ? 'text-amber-500 dark:text-amber-400 animate-[spin_4s_linear_infinite]' : 'text-zinc-400 dark:text-zinc-500'} />
+                <span>Ambient Glow: {ambientLighting ? 'ON' : 'OFF'}</span>
+              </button>
             </div>
           </div>
         </motion.div>
@@ -361,11 +378,13 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
               <motion.div
                 key={project.id}
                 layout
-                initial={{ opacity: 0, scale: 0.96, y: 30 }}
-                whileInView={{ opacity: 1, scale: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ duration: 0.45, ease: 'easeOut' }}
+                initial={{ opacity: 0, scale: 0.96, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.94, y: 15 }}
+                transition={{ 
+                  opacity: { duration: 0.22 },
+                  layout: { type: 'spring', stiffness: 360, damping: 32 }
+                }}
                 className="h-full"
               >
                 <div
@@ -377,7 +396,25 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
                   className="group relative flex flex-col h-full outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-blue-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950 rounded-xl cursor-pointer"
                   aria-label={`Project: ${project.title}. Role: ${project.role}. Press Enter or Space to view details.`}
                 >
-                  <Tilt className="group relative flex flex-col h-full bg-zinc-50 dark:bg-zinc-900/60 rounded-xl border border-zinc-200/80 dark:border-zinc-805 overflow-hidden transition-all hover:shadow-md hover:border-zinc-350 dark:hover:border-zinc-700">
+                  {/* Soft Adaptive Ambient Lighting Glow Effect */}
+                  <AnimatePresence>
+                    {ambientLighting && (
+                      <motion.div
+                        key="ambient-glow"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1.04 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.4, ease: 'easeOut' }}
+                        className="absolute inset-0 -z-10 rounded-2xl bg-gradient-to-br from-indigo-500/10 via-sky-400/20 to-transparent dark:from-sky-500/15 dark:via-blue-500/5 dark:to-transparent opacity-100 blur-xl pointer-events-none transition-all duration-500"
+                      />
+                    )}
+                  </AnimatePresence>
+
+                  <Tilt className={`group relative flex flex-col h-full rounded-xl border overflow-hidden transition-all duration-300 ${
+                    ambientLighting 
+                      ? 'bg-zinc-50/95 dark:bg-zinc-900/80 border-sky-450/35 dark:border-sky-500/25 shadow-[0_0_25px_rgba(56,189,248,0.06)] dark:shadow-[0_0_35px_rgba(56,189,248,0.12)]' 
+                      : 'bg-zinc-50 dark:bg-zinc-900/60 border-zinc-200/80 dark:border-zinc-805 hover:shadow-md hover:border-zinc-350 dark:hover:border-zinc-700'
+                  }`}>
                   {/* Simulated Custom Live Mockup Panel (Aesthetic Header) */}
                   <div className="relative aspect-video w-full p-4 bg-zinc-100 dark:bg-zinc-950/80 border-b border-zinc-200/50 dark:border-zinc-850/50 flex items-center justify-center overflow-hidden">
                     <div className="w-full h-full transform group-hover:scale-102 transition-transform duration-500">
