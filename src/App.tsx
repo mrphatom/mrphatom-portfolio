@@ -575,6 +575,147 @@ export default function App() {
   const [ripplePosition, setRipplePosition] = useState<{ x: number; y: number } | null>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
 
+  // Pull to refresh states
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isPulling, setIsPulling] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [ptrWave, setPtrWave] = useState<{ x: number; y: number; active: boolean } | null>(null);
+
+  // Pull-to-Refresh Controller Effect
+  useEffect(() => {
+    let startY = 0;
+    let startX = 0;
+    let isCandidate = false;
+    let currentPulling = false;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      // Only recognize touch dragging or mouse click drags if scrollTop === 0
+      const rightPanel = document.getElementById('right-scroll-panel');
+      const isAtTop = rightPanel 
+        ? (window.innerWidth >= 1024 ? rightPanel.scrollTop === 0 : window.scrollY === 0)
+        : window.scrollY === 0;
+
+      if (!isAtTop || isRefreshing) return;
+
+      startY = e.clientY;
+      startX = e.clientX;
+      isCandidate = true;
+      currentPulling = false;
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!isCandidate) return;
+
+      const deltaY = e.clientY - startY;
+      const deltaX = e.clientX - startX;
+
+      // Detect deliberate downward drag
+      if (!currentPulling && deltaY > 10 && deltaY > Math.abs(deltaX)) {
+        currentPulling = true;
+        setIsPulling(true);
+      }
+
+      if (currentPulling) {
+        // Prevent default only if actively dragging downward at the top to block system overscrolls
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        const dampened = Math.min(130, Math.pow(Math.max(0, deltaY), 0.88));
+        setPullDistance(dampened);
+      }
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      if (currentPulling) {
+        const finalDeltaY = e.clientY - startY;
+        const dampened = Math.min(130, Math.pow(Math.max(0, finalDeltaY), 0.88));
+
+        if (dampened >= 72) {
+          triggerRefresh(e.clientX, e.clientY);
+        } else {
+          animateSnapBack();
+        }
+      }
+      isCandidate = false;
+      currentPulling = false;
+      setIsPulling(false);
+    };
+
+    const triggerRefresh = async (clientX: number, clientY: number) => {
+      setIsRefreshing(true);
+      setPullDistance(95);
+
+      try {
+        triggerHaptic('medium');
+        playNavTick();
+      } catch {}
+
+      // Spread circular wave ripple!
+      const burstX = clientX !== undefined && clientX > 0 ? clientX : window.innerWidth / 2;
+      const burstY = clientY !== undefined && clientY > 0 ? clientY : 80;
+      setPtrWave({ x: burstX, y: burstY, active: true });
+
+      // Run live auto-sync fetches securely
+      try {
+        const response = await fetch('/api/portfolio');
+        if (response.ok) {
+          const remoteData = await response.json();
+          const merged = {
+            ...portfolioData,
+            ...remoteData,
+            profile: {
+              ...portfolioData.profile,
+              ...(remoteData.profile || {})
+            }
+          };
+          setEditableData(merged);
+          localStorage.setItem('portfolio_data', JSON.stringify(merged));
+        }
+      } catch (err) {
+        console.warn('Pull-to-refresh sync info:', err);
+      }
+
+      setTimeout(() => {
+        animateSnapBack(() => {
+          setIsRefreshing(false);
+          setPtrWave(null);
+        });
+      }, 1050); // pleasant duration to appreciate the ripples
+    };
+
+    const animateSnapBack = (callback?: () => void) => {
+      let currentVal = 0;
+      setPullDistance(prev => {
+        currentVal = prev;
+        return prev;
+      });
+
+      const step = currentVal / 10;
+      const timer = setInterval(() => {
+        currentVal -= step;
+        if (currentVal <= 1) {
+          setPullDistance(0);
+          clearInterval(timer);
+          if (callback) callback();
+        } else {
+          setPullDistance(currentVal);
+        }
+      }, 16);
+    };
+
+    window.addEventListener('pointerdown', handlePointerDown, { passive: true });
+    window.addEventListener('pointermove', handlePointerMove, { passive: false });
+    window.addEventListener('pointerup', handlePointerUp, { passive: true });
+    window.addEventListener('pointercancel', handlePointerUp, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+  }, [isRefreshing]);
+
   const [isOffline, setIsOffline] = useState(false);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [testOutcome, setTestOutcome] = useState<'success' | 'failure' | null>(null);
@@ -1895,6 +2036,125 @@ export default function App() {
                 opacity: { duration: 0.52, times: [0, 0.5, 0.8, 1] }
               }}
               className={faderColor === 'dark' ? 'bg-[#060606]' : 'bg-zinc-100'}
+            />
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Pull-to-Refresh Sleek Capsule */}
+      <AnimatePresence>
+        {(isPulling || isRefreshing) && (
+          <motion.div
+            initial={{ opacity: 0, y: -45, x: '-50%' }}
+            animate={{ opacity: 1, y: 16 + pullDistance * 0.14, x: '-50%' }}
+            exit={{ opacity: 0, y: -45, x: '-50%' }}
+            transition={{ type: 'spring', damping: 20, stiffness: 280 }}
+            className="fixed top-0 left-1/2 z-[100000] px-4 py-2 rounded-full border border-zinc-200/60 dark:border-zinc-850/60 bg-white/75 dark:bg-[#0c0c0c]/75 backdrop-blur-md shadow-lg select-none pointer-events-none flex items-center gap-2.5 font-mono text-[10px] tracking-wider uppercase font-semibold text-zinc-650 dark:text-zinc-300"
+          >
+            {/* Spinning/progress circle */}
+            <div className="relative w-4 h-4 flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                <circle 
+                  className="text-zinc-200 dark:text-zinc-800/40" 
+                  strokeWidth="4" 
+                  stroke="currentColor" 
+                  fill="none" 
+                  cx="18" 
+                  cy="18" 
+                  r="14" 
+                />
+                <circle 
+                  className="text-sky-500 dark:text-sky-400" 
+                  strokeWidth="4" 
+                  strokeDasharray="88"
+                  strokeDashoffset={isRefreshing ? 22 : Math.max(0, 88 - (pullDistance / 72) * 88)}
+                  stroke="currentColor" 
+                  fill="none" 
+                  cx="18" 
+                  cy="18" 
+                  r="14" 
+                  style={{ transition: isRefreshing ? 'none' : 'stroke-dashoffset 0.1s ease-out' }}
+                />
+              </svg>
+              {isRefreshing && (
+                <div className="absolute inset-0 flex items-center justify-center animate-spin">
+                  <div className="w-1 h-1 bg-sky-400 dark:bg-sky-450 rounded-full" />
+                </div>
+              )}
+            </div>
+            
+            <span>
+              {isRefreshing 
+                ? 'Syncing Workspace' 
+                : pullDistance >= 72
+                  ? 'Release to Sync' 
+                  : 'Pull to Sync'
+              }
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modern Circular Reveal Soft Blue-Grey Wave Ripple Effect */}
+      <AnimatePresence>
+        {ptrWave && ptrWave.active && (
+          <div className="fixed inset-0 z-[100001] pointer-events-none overflow-hidden select-none">
+            {/* Primary Sharp & Fast Wave */}
+            <motion.div
+              style={{
+                position: 'absolute',
+                left: ptrWave.x,
+                top: ptrWave.y,
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                x: '-50%',
+                y: '-50%',
+                transformOrigin: 'center',
+                filter: 'blur(20px)',
+                background: darkMode
+                  ? 'radial-gradient(circle, rgba(56, 189, 248, 0.4) 0%, rgba(148, 163, 184, 0.15) 50%, rgba(0, 0, 0, 0) 80%)'
+                  : 'radial-gradient(circle, rgba(14, 165, 233, 0.3) 0%, rgba(148, 163, 184, 0.2) 50%, rgba(0, 0, 0, 0) 80%)',
+              }}
+              initial={{ scale: 0, opacity: 0.9 }}
+              animate={{ 
+                scale: Math.max(window.innerWidth, window.innerHeight) * 0.18,
+                opacity: [0.9, 0.6, 0]
+              }}
+              exit={{ opacity: 0 }}
+              transition={{
+                duration: 0.8,
+                ease: [0.1, 0.8, 0.3, 1]
+              }}
+            />
+
+            {/* Secondary Slow & Deep Wave */}
+            <motion.div
+              style={{
+                position: 'absolute',
+                left: ptrWave.x,
+                top: ptrWave.y,
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                x: '-50%',
+                y: '-50%',
+                transformOrigin: 'center',
+                filter: 'blur(45px)',
+                background: darkMode
+                  ? 'radial-gradient(circle, rgba(56, 189, 248, 0.2) 0%, rgba(148, 163, 184, 0.08) 55%, rgba(0, 0, 0, 0) 80%)'
+                  : 'radial-gradient(circle, rgba(14, 165, 233, 0.18) 0%, rgba(148, 163, 184, 0.1) 55%, rgba(0, 0, 0, 0) 80%)',
+              }}
+              initial={{ scale: 0, opacity: 0.8 }}
+              animate={{ 
+                scale: Math.max(window.innerWidth, window.innerHeight) * 0.32,
+                opacity: [0.8, 0.3, 0]
+              }}
+              exit={{ opacity: 0 }}
+              transition={{
+                duration: 1.4,
+                ease: [0.15, 0.85, 0.35, 1]
+              }}
             />
           </div>
         )}

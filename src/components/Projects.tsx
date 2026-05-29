@@ -1,6 +1,6 @@
 import React, { useState, useEffect, MouseEvent, useRef, TouchEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ExternalLink, Code, FolderOpen, X, ArrowUpRight } from 'lucide-react';
+import { ExternalLink, Code, FolderOpen, X, ArrowUpRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { Project } from '../types';
 import ProjectMockup from './ProjectMockup';
 import Tilt from './Tilt';
@@ -15,6 +15,12 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
   const [selectedTag, setSelectedTag] = useState('All');
   const [activeProject, setActiveProject] = useState<Project | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Reset expansion state when filters change
+  useEffect(() => {
+    setIsExpanded(false);
+  }, [selectedTag, searchQuery]);
 
   // Swipe gesture touch references
   const touchStartY = useRef<number | null>(null);
@@ -118,6 +124,8 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
     );
     return matchesTag && matchesSearch;
   });
+
+  const displayedProjects = isExpanded ? filteredProjects : filteredProjects.slice(0, 6);
 
   // Handle keyboard arrow navigation through project grid
   const handleCardKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, project: Project, index: number) => {
@@ -349,7 +357,7 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
             className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8"
           >
             <AnimatePresence mode="popLayout">
-            {filteredProjects.map((project, index) => (
+            {displayedProjects.map((project, index) => (
               <motion.div
                 key={project.id}
                 layout
@@ -460,6 +468,27 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
             ))}
           </AnimatePresence>
         </motion.div>
+      )}
+
+      {filteredProjects.length > 6 && (
+        <div className="flex justify-center mt-12">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="group inline-flex items-center gap-2 px-5 py-2.5 text-xs font-mono rounded-lg bg-zinc-900 border border-zinc-900 hover:bg-zinc-850 text-white dark:bg-zinc-50 dark:border-zinc-50 dark:text-zinc-950 dark:hover:bg-zinc-200 transition-all shadow-xs active:scale-95 duration-100 cursor-pointer select-none"
+          >
+            {isExpanded ? (
+              <>
+                <span>See Less</span>
+                <ChevronUp size={14} className="group-hover:-translate-y-0.5 transition-transform" />
+              </>
+            ) : (
+              <>
+                <span>See More ({filteredProjects.length - 6} remaining)</span>
+                <ChevronDown size={14} className="group-hover:translate-y-0.5 transition-transform" />
+              </>
+            )}
+          </button>
+        </div>
       )}
 
         {/* Core Detail Specs Overlay Modal Modal (Popup View) */}
