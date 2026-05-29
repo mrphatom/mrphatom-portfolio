@@ -12,10 +12,10 @@ const PLAYLIST = [
     url: "/api/music/mice-on-venus.mp3"
   },
   {
-    title: "Sleeping City",
-    artist: "Laidback Ambient Synth",
-    album: "Ambient Backdrops",
-    url: "/api/music/sleeping-city.mp3"
+    title: "Sweden",
+    artist: "C418",
+    album: "Volume Alpha",
+    url: "/api/music/sweden.mp3"
   },
   {
     title: "Sunroof",

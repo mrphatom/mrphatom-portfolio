@@ -200,9 +200,9 @@ async function startServer() {
         primary: "https://archive.org/download/mice-on-venus-vinyl/Mice%20on%20Venus.mp3",
         fallback: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
       },
-      "sleeping-city": {
-        filename: "sleeping_city.mp3",
-        primary: "https://drive.google.com/uc?export=download&id=1AH6ezAm0ZDuOo1KlgwXRsb1CeXu-bD_v",
+      "sweden": {
+        filename: "sweden.mp3",
+        primary: "https://archive.org/download/c418swedenminecraftvolumealpha_201908/c418-sweden-minecraft-volume-alpha.mp3",
         fallback: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
       },
       "sunroof": {
@@ -233,7 +233,7 @@ async function startServer() {
     let responseBuffer: Buffer | null = null;
 
     try {
-      if (trackKey === "sleeping-city") {
+      if (trackKey === "sleeping-city-legacy") {
         // Special Google Drive processing
         const fileId = "1AH6ezAm0ZDuOo1KlgwXRsb1CeXu-bD_v";
         const directUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
