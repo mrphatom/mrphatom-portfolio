@@ -1,4 +1,4 @@
-import { useState, useEffect, MouseEvent as ReactMouseEvent, useRef } from 'react';
+import { useState, useEffect, MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { portfolioData } from './data';
 import Header from './components/Header';
@@ -29,17 +29,15 @@ export default function App() {
       clearTimeout(glitchTimerRef.current);
     }
     
-    // Play an intense, physically jarring error-burst haptic cycle
-    triggerHaptic('heavy');
-    setTimeout(() => {
-      try { triggerHaptic('error'); } catch {} // Rapid stutter burst [30, 50, 30, 50]
-    }, 80);
-    setTimeout(() => {
-      try { triggerHaptic('double'); } catch {} 
-    }, 280);
-    setTimeout(() => {
-      try { triggerHaptic('heavy'); } catch {}
-    }, 450);
+    // Play an intense, physically jarring error-burst haptic vibration pattern (especially weird on Mobile & Tablet!)
+    try {
+      if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+        const weirdHeavyErrorPattern = [150, 45, 180, 30, 220, 50, 120, 30, 250, 40, 130, 20, 200, 45, 380];
+        navigator.vibrate(weirdHeavyErrorPattern);
+      } else {
+        triggerHaptic('heavy');
+      }
+    } catch {}
     
     playPhantomGlitchSound();
     setGlitchActive(true);
@@ -59,13 +57,26 @@ export default function App() {
     }, 1600);
   };
 
-  const handleCreativeDeveloperTap = () => {
+  const handleCreativeDeveloperTap = (e: ReactTouchEvent | ReactMouseEvent) => {
+    // Only detect triple-tappings for touch-enabled devices (mobiles/tablets)
+    const isTouchOrTablet = typeof window !== 'undefined' && (('ontouchstart' in window) || (navigator.maxTouchPoints > 0));
+    
+    if (!isTouchOrTablet) {
+      // Ignore click triggering on pure Desktop devices (desktops rely strictly on typing "PHATOM" on keyboard!)
+      return;
+    }
+
+    // Prevent duplicate events on fast hybrid taps
+    if (e.type === 'click' && ('ontouchstart' in window)) {
+      return;
+    }
+
     const now = Date.now();
-    // 550ms window is ideal for triple tap detection on mobile screens
+    // 550ms window is ideal for triple tap detection on touchscreens
     const recentTaps = [...lastTapRef.current, now].filter(t => now - t < 550);
     lastTapRef.current = recentTaps;
     
-    // Provide an instantaneous premium tactile click/tap feel on every tap!
+    // Provide tactile click feel on every individual tap
     try { triggerHaptic('light'); } catch {}
 
     if (recentTaps.length >= 3) {
@@ -212,6 +223,66 @@ export default function App() {
       window.removeEventListener('focus', handleFocusSync);
     };
   }, []);
+
+  // System-wide literal text scrambler all over the website (excluding the nav bar elements, logo, dynamic island)
+  useEffect(() => {
+    if (!glitchActive) return;
+
+    // We query elements with descriptive textual content across the entire DOM tree
+    const elements = document.querySelectorAll('h1, h2, h3, h4, h5, h6, p, span, a, button, label, li');
+    const originalTexts = new Map<Element, string>();
+
+    elements.forEach((el) => {
+      // Exclude nav components, dynamic island, specific logo indicators and non-glitched elements explicitly
+      if (
+        el.closest('#header-nav') || 
+        el.closest('#desktop-nav') || 
+        el.closest('#logo-link') ||
+        el.closest('#dynamic-island-container') ||
+        el.closest('.select-none') || 
+        el.classList.contains('no-glitch') ||
+        el.id === 'header-nav' ||
+        el.id === 'desktop-nav' ||
+        el.id === 'logo-link' ||
+        el.id === 'dynamic-island-container'
+      ) {
+        return;
+      }
+      if (el.textContent && el.children.length === 0) { // Only target leaf nodes to safely preserve child tag structures
+        originalTexts.set(el, el.textContent);
+      }
+    });
+
+    const glitchChars = '@#$%&*?+=~^0123456789PHATOM!';
+    const interval = setInterval(() => {
+      elements.forEach((el) => {
+        const original = originalTexts.get(el);
+        if (!original) return;
+
+        const scrambled = original
+          .split('')
+          .map((char) => {
+            if (/\s/.test(char)) return char; // Preserve original white spaces
+            return Math.random() < 0.28
+              ? glitchChars[Math.floor(Math.random() * glitchChars.length)]
+              : char;
+          })
+          .join('');
+        el.textContent = scrambled;
+      });
+    }, 85);
+
+    return () => {
+      clearInterval(interval);
+      // Perfect instant restoration of original textual contents
+      elements.forEach((el) => {
+        const original = originalTexts.get(el);
+        if (original) {
+          el.textContent = original;
+        }
+      });
+    };
+  }, [glitchActive]);
 
   const [island, setIsland] = useState<{
     type: 'none' | 'theme' | 'redirect_prompt' | 'download_resume_prompt' | 'glance' | 'time_spent';
@@ -1378,6 +1449,16 @@ export default function App() {
   return (
     <div className={`w-screen min-h-screen bg-zinc-100/40 dark:bg-[#060606] text-zinc-800 dark:text-zinc-100 selection:bg-zinc-200 dark:selection:bg-zinc-800 selection:text-zinc-900 transition-colors duration-300 md:p-3 lg:p-4 xl:p-6 overflow-x-hidden lg:h-screen lg:overflow-hidden flex items-center justify-center ${glitchActive ? 'phantom-glitch-active' : ''}`}>
       
+      {/* Hidden SVG custom digital displacement map filters for actual organic/webbed tearing and warping */}
+      <svg className="fixed w-0 h-0 pointer-events-none select-none overflow-hidden" aria-hidden="true" style={{ visibility: 'hidden' }}>
+        <defs>
+          <filter id="phantom-webbed-disp">
+            <feTurbulence type="fractalNoise" baseFrequency="0.04 0.15" numOctaves="3" result="turb" />
+            <feDisplacementMap in="SourceGraphic" in2="turb" scale="40" xChannelSelector="R" yChannelSelector="G" />
+          </filter>
+        </defs>
+      </svg>
+
       {/* Ghostly scanlines and analog digital noise layers animated via motion for supreme fluid experience */}
       <AnimatePresence>
         {glitchActive && (
@@ -1627,6 +1708,7 @@ export default function App() {
 
             {/* Signature Title Heading (Triple-tap/click triggers Ghostly Glitch) */}
             <h1 
+              onTouchStart={handleCreativeDeveloperTap}
               onClick={handleCreativeDeveloperTap}
               className="text-5xl sm:text-6xl font-display font-medium leading-[0.95] tracking-tight text-zinc-900 dark:text-white cursor-pointer select-none active:scale-[0.98] transition-transform duration-200 hover:text-zinc-600 dark:hover:text-zinc-300"
               title="Triple click/tap me for the secret phantom glitch..."

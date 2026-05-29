@@ -96,8 +96,26 @@ a, button, [role="button"], img {
 
 /* Ghostly Glitch Styles */
 .phantom-glitch-active {
-  animation: phatom-glitch-shake 0.4s steps(3) infinite, phatom-color-flicker 0.28s steps(2) infinite, phatom-chromatic-channels 0.2s linear infinite;
+  animation: phatom-glitch-shake 0.35s steps(3) infinite, phatom-color-flicker 0.2s steps(2) infinite, phatom-chromatic-channels 0.15s linear infinite;
+  filter: url(#phantom-webbed-disp) contrast(1.4) saturate(1.7) brightness(1.15);
   position: relative;
+}
+
+/* Guard the main header navigation, logos, systems and interactive dynamic island from distortions as requested */
+.phantom-glitch-active #header-nav,
+.phantom-glitch-active #desktop-nav,
+.phantom-glitch-active #logo-link,
+.phantom-glitch-active [id="header-nav"],
+.phantom-glitch-active [id="desktop-nav"],
+.phantom-glitch-active [id="logo-link"],
+.phantom-glitch-active [id="dynamic-island-container"],
+.phantom-glitch-active .select-none,
+.phantom-glitch-active header,
+.phantom-glitch-active .no-glitch {
+  filter: none !important;
+  transform: none !important;
+  animation: none !important;
+  text-shadow: none !important;
 }
 
 @keyframes phatom-chromatic-channels {
