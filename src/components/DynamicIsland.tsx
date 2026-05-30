@@ -42,11 +42,28 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
   const [secondsElapsed, setSecondsElapsed] = useState(0);
 
   const [stack, setStack] = useState<StackItem[]>([]);
-  const [isRotating, setIsRotating] = useState(false);
+
+  const [swipeUnlocked, setSwipeUnlocked] = useState(false);
+  const [dragY, setDragY] = useState(0);
 
   const pointerStartY = useRef<number | null>(null);
   const pointerStartX = useRef<number | null>(null);
-  const longPressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const preventClickRef = useRef(false);
+  const longPressForSwipeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Exclusively track mobile or tablet devices (< 1024px width or touch compatibility)
+  const [isMobileOrTablet, setIsMobileOrTablet] = useState(false);
+
+  useEffect(() => {
+    const checkDevice = () => {
+      const isMobileSize = window.innerWidth < 1024;
+      const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+      setIsMobileOrTablet(isMobileSize || isTouch);
+    };
+    checkDevice();
+    window.addEventListener('resize', checkDevice);
+    return () => window.removeEventListener('resize', checkDevice);
+  }, []);
 
   // Synchronize stack of dynamic island cards whenever a new prop action fires
   useEffect(() => {
@@ -82,8 +99,7 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
     // Form appropriate multi-layered deck structure following Samsung stack widgets design
     let initialLayers: StackItem[] = [];
     if (island.type === 'glance' && island.projectName === 'social') {
-      // Standalone for 'Connect Profile' when no other glance state element is active
-      initialLayers = [mainCard];
+      initialLayers = [mainCard, timeSpentCard];
     } else if (island.type === 'time_spent') {
       initialLayers = [mainCard, connectProfileCard];
     } else {
@@ -93,23 +109,33 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
     setStack(initialLayers);
     setIsLongPressed(false);
     setIsTimeExpanded(false);
+    setSwipeUnlocked(false);
+    setDragY(0);
   }, [island]);
 
-  // Rotate stacked card to the and bring the back element forward
+  // Rotate stacked card and bring the back element forward instantly with Framer Motion layout transitions
   const rotateStack = () => {
-    if (stack.length <= 1 || isRotating) return;
-    setIsRotating(true);
+    if (stack.length <= 1) return;
     playSoftClick();
-    triggerHaptic(20, true);
+    triggerHaptic(28, true);
 
-    setTimeout(() => {
-      setStack((prev) => {
-        if (prev.length <= 1) return prev;
-        const [top, ...rest] = prev;
-        return [...rest, top];
-      });
-      setIsRotating(false);
-    }, 250);
+    setStack((prev) => {
+      if (prev.length <= 1) return prev;
+      const [top, ...rest] = prev;
+      return [...rest, top];
+    });
+  };
+
+  const rotateStackWithSwipe = () => {
+    if (stack.length <= 1) return;
+    playSoftClick();
+    triggerHaptic(38, true); // Deeper high-fidelity tactile pop for swipe-up gestures
+
+    setStack((prev) => {
+      if (prev.length <= 1) return prev;
+      const [top, ...rest] = prev;
+      return [...rest, top];
+    });
   };
 
   // Live seconds tracking effect when island is shown as time_spent alert
@@ -136,9 +162,9 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
   };
 
   const clearLongPressRef = () => {
-    if (longPressTimeoutRef.current) {
-      clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
+    if (longPressForSwipeTimeoutRef.current) {
+      clearTimeout(longPressForSwipeTimeoutRef.current);
+      longPressForSwipeTimeoutRef.current = null;
     }
   };
 
@@ -182,41 +208,111 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
     addRipple(e.clientX, e.clientY);
     pointerStartY.current = e.clientY;
     pointerStartX.current = e.clientX;
+    preventClickRef.current = false;
 
-    // Start long-press detection ONLY if in glance mode
-    if (island.type === 'glance') {
-      longPressTimeoutRef.current = setTimeout(() => {
-        playNavTick(); // nice premium physical tick/pop sound
-        triggerHaptic(28, true); // distinctive success vibration for long-press trigger
-        setIsLongPressed(true);
-      }, 550); // 550ms for long-press action threshold
+    // Start long-press detection ONLY if on mobile/tablet and in glance/time_spent modes
+    if (isMobileOrTablet && (island.type === 'glance' || island.type === 'time_spent')) {
+      // Start 1-second long-press detection precisely to unlock swipe-cycling mechanics
+      longPressForSwipeTimeoutRef.current = setTimeout(() => {
+        playNavTick();
+        triggerHaptic(42, true); // deeper high-fidelity physical feedback for lock release
+        setSwipeUnlocked(true);
+        preventClickRef.current = true; // Lock click expansion!
+      }, 1000); // 1000ms (1s) hold requirement
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isMobileOrTablet) return; // Ignore drag movements on desktop
+    if (!isHolding || pointerStartY.current === null || pointerStartX.current === null) return;
+
+    const deltaY = e.clientY - pointerStartY.current;
+    const deltaX = e.clientX - pointerStartX.current;
+
+    if (!swipeUnlocked) {
+      // Form more generous threshold (35px) so minor finger jitter or natural warmth-drift won't break the hold
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      if (distance > 35) {
+        // Cancel the 1s long press to swipe if they dragged early
+        if (longPressForSwipeTimeoutRef.current) {
+          clearTimeout(longPressForSwipeTimeoutRef.current);
+          longPressForSwipeTimeoutRef.current = null;
+        }
+      }
+      return;
+    }
+
+    // Swipe is unlocked, track the drag smoothly
+    if (deltaY < 0) {
+      setDragY(deltaY);
+    } else {
+      // Small rubber banding downwards
+      setDragY(deltaY * 0.25);
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     setIsHolding(false);
     clearLongPressRef();
+
+    if (!isMobileOrTablet) {
+      pointerStartY.current = null;
+      pointerStartX.current = null;
+      setDragY(0);
+      setSwipeUnlocked(false);
+      preventClickRef.current = false;
+      return;
+    }
+
     if (pointerStartY.current !== null && pointerStartX.current !== null) {
       const deltaY = e.clientY - pointerStartY.current;
       const deltaX = e.clientX - pointerStartX.current;
-      
-      // If the user swiped upwards (deltaY negative) by more than 25px
-      // and it was primarily a vertical swipe
-      if (deltaY < -25 && Math.abs(deltaY) > Math.abs(deltaX)) {
+
+      // Handle custom long-press swipe-up stacking mechanism with an eager -20px threshold
+      if (swipeUnlocked && (dragY < -20 || deltaY < -20)) {
         if (stack.length > 1) {
-          rotateStack();
+          rotateStackWithSwipe();
         } else {
           playSoftClick();
-          triggerHaptic(22, true); // heavier dismiss vibration pulse
+          triggerHaptic(22, true);
           onClose();
         }
         pointerStartY.current = null;
         pointerStartX.current = null;
+        setDragY(0);
+        setSwipeUnlocked(false);
+        setTimeout(() => {
+          preventClickRef.current = false;
+        }, 100);
+        return;
+      }
+
+      // Traditional non-press fast swipe fallback
+      if (!swipeUnlocked && deltaY < -25 && Math.abs(deltaY) > Math.abs(deltaX)) {
+        if (stack.length > 1) {
+          rotateStack();
+        } else {
+          playSoftClick();
+          triggerHaptic(22, true);
+          onClose();
+        }
+        pointerStartY.current = null;
+        pointerStartX.current = null;
+        setDragY(0);
+        setSwipeUnlocked(false);
         return;
       }
     }
+
     pointerStartY.current = null;
     pointerStartX.current = null;
+    setDragY(0);
+    setSwipeUnlocked(false);
+
+    // Clear click prevention lock after a tiny tick
+    setTimeout(() => {
+      preventClickRef.current = false;
+    }, 100);
   };
 
   const handlePointerCancelOrLeave = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -230,6 +326,8 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
     clearLongPressRef();
     pointerStartY.current = null;
     pointerStartX.current = null;
+    setDragY(0);
+    setSwipeUnlocked(false);
   };
 
   // Trigger a haptic feedback synchronized with the physical expansion whenever the state shifts to a larger module
@@ -346,6 +444,11 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
         {item.type === 'glance' && !isLongPressed && (
           <div 
             onClick={isInteractive ? (e) => {
+              if (preventClickRef.current) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+              }
               e.preventDefault();
               e.stopPropagation();
               playNavTick();
@@ -426,6 +529,11 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
         {item.type === 'time_spent' && !isTimeExpanded && (
           <div 
             onClick={isInteractive ? (e) => {
+              if (preventClickRef.current) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+              }
               e.preventDefault();
               e.stopPropagation();
               playNavTick();
@@ -568,10 +676,7 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
     <div className="fixed bottom-4 left-0 right-0 z-[100000] pointer-events-none select-none px-4 flex justify-center">
       <div className="relative pointer-events-auto">
         <AnimatePresence mode="popLayout">
-          {stack.map((item, index) => {
-            // Render only top 2 cards for a pristine, visual look without unnecessary overlays
-            if (index > 1) return null;
-
+          {stack.slice(0, 2).map((item, index) => {
             const isTop = index === 0;
 
             return (
@@ -581,11 +686,17 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
                 layout
                 onPointerDown={isTop ? handlePointerDown : undefined}
                 onPointerUp={isTop ? handlePointerUp : undefined}
+                onPointerMove={isTop ? handlePointerMove : undefined}
                 onPointerCancel={isTop ? handlePointerCancelOrLeave : undefined}
                 onPointerLeave={isTop ? handlePointerCancelOrLeave : undefined}
                 onClick={
                   isTop
                     ? (e) => {
+                        if (preventClickRef.current) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          return;
+                        }
                         if (e.target === e.currentTarget) {
                           playSoftClick();
                           triggerHaptic(10, true);
@@ -612,14 +723,7 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
                 }
                 animate={
                   isTop
-                    ? isRotating
-                      ? {
-                          y: -95,
-                          scale: 0.85,
-                          opacity: 0,
-                          transition: { duration: 0.24, ease: 'easeOut' },
-                        }
-                      : isBouncing
+                    ? isBouncing
                       ? {
                           y: [0, -12, 4, -2, 0],
                           scale: [1, 1.12, 0.94, 1.04, 0.98, 1],
@@ -634,15 +738,18 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
                         }
                       : isHolding
                       ? {
-                          y: 0,
-                          scale: [0.95, 1.02, 0.95],
+                          y: dragY,
+                          scale: swipeUnlocked ? 1.04 : [0.95, 1.02, 0.95],
                           borderRadius: getBorderRadius(),
                           width: 'auto',
                           height: 'auto',
                           opacity: 1,
-                          transition: {
-                            scale: { repeat: Infinity, duration: 1.0, ease: 'easeInOut' },
-                          },
+                          boxShadow: swipeUnlocked 
+                            ? '0 0 25px rgba(10, 132, 255, 0.45), 0 20px 45px -12px rgba(0, 0, 0, 0.85)' 
+                            : '0 20px 45px -12px rgba(0, 0, 0, 0.85)',
+                          transition: swipeUnlocked 
+                            ? { duration: 0.15 } 
+                            : { scale: { repeat: Infinity, duration: 1.0, ease: 'easeInOut' } },
                         }
                       : {
                           y: 0,
@@ -653,47 +760,53 @@ export default function DynamicIsland({ island, onClose, onResumeConfirm }: Dyna
                           height: 'auto',
                          }
                     : {
-                        y: -8,
-                        scale: 0.94,
-                        opacity: 0.45,
+                        y: swipeUnlocked ? -8 + (dragY * 0.15) : -8,
+                        scale: swipeUnlocked ? Math.min(1.0, 0.94 + (Math.abs(dragY) * 0.0015)) : 0.94,
+                        opacity: swipeUnlocked ? Math.min(1.0, 0.45 + (Math.abs(dragY) * 0.012)) : 0.45,
                         borderRadius: '32px',
                       }
                 }
                 exit={
                   isTop
                     ? {
-                        y: 85,
-                        scale: 0.001,
+                        y: -150,
+                        scale: 0.82,
                         opacity: 0,
-                        borderRadius: '50%',
-                        width: '8px',
-                        height: '8px',
+                        transition: { duration: 0.28, ease: [0.16, 1, 0.3, 1] }
                       }
                     : {
                         opacity: 0,
                         scale: 0.8,
                         y: 15,
+                        transition: { duration: 0.22 }
                       }
                 }
                 transition={
                   isTop
-                    ? {
-                        type: 'spring',
-                        stiffness: 440,
-                        damping: 24,
-                        mass: 0.85,
-                      }
+                    ? isHolding
+                      ? { type: 'spring', stiffness: 850, damping: 45, mass: 0.4 }
+                      : {
+                          type: 'spring',
+                          stiffness: 450,
+                          damping: 26,
+                          mass: 0.65,
+                        }
                     : {
-                        duration: 0.3,
-                        ease: 'easeOut',
+                        type: 'spring',
+                        stiffness: 380,
+                        damping: 24,
                       }
                 }
                 className={`${
                   isTop ? 'relative z-20 cursor-pointer' : 'absolute inset-0 z-10 pointer-events-none'
                 } bg-[#000000]/98 dark:bg-[#09090b]/99 border border-white/[0.04] dark:border-white/[0.03] text-zinc-100 shadow-[0_20px_45px_-12px_rgba(0,0,0,0.85)] backdrop-blur-3xl overflow-hidden rounded-[32px]`}
                 style={{
-                  boxShadow: '0 20px 45px -12px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
+                  border: swipeUnlocked && isTop ? '1px solid rgba(10, 132, 255, 0.85)' : undefined,
+                  boxShadow: swipeUnlocked && isTop
+                    ? '0 0 30px rgba(10, 132, 255, 0.5), 0 20px 45px -12px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.05)'
+                    : '0 20px 45px -12px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255, 255, 255, 0.05)',
                   borderRadius: isTop ? getBorderRadius() : '32px',
+                  touchAction: isMobileOrTablet && isHolding ? 'none' : 'auto',
                 }}
               >
                 {/* Embedded absolute ripples rendering for top card */}

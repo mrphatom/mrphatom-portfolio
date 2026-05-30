@@ -23,7 +23,23 @@ export default function Skills({ skills }: SkillsProps) {
     // Scroll smoothly to Projects section
     const element = document.getElementById('work');
     if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const rightPanel = document.getElementById('right-scroll-panel');
+      if (rightPanel && window.innerWidth >= 1024) {
+        rightPanel.scrollTo({
+          top: element.offsetTop - 20,
+          behavior: 'smooth'
+        });
+      } else {
+        // Handle mobile scroll with page header offset
+        const headerOffset = 90; // Mobile sticky nav height offset
+        const elementPosition = element.getBoundingClientRect().top;
+        const offsetPosition = elementPosition + window.scrollY - headerOffset;
+        
+        window.scrollTo({
+          top: offsetPosition,
+          behavior: 'smooth'
+        });
+      }
     }
   };
 
