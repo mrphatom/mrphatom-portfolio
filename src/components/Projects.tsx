@@ -92,6 +92,7 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
   // Universal handler to intercept external navigation and pass to Dynamic Island
   const handleExternalRedirect = (e: MouseEvent<HTMLAnchorElement>, url: string, projectName: string) => {
     e.preventDefault();
+    e.stopPropagation();
     window.dispatchEvent(new CustomEvent('trigger-redirect-island', {
       detail: { url, name: projectName }
     }));
@@ -442,11 +443,8 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
                 <div
                   data-project-card
                   data-project-index={index}
-                  tabIndex={0}
-                  onClick={() => setActiveProject(project)}
-                  onKeyDown={(e) => handleCardKeyDown(e, project, index)}
-                  className="group relative flex flex-col h-full outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-blue-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950 rounded-xl cursor-pointer"
-                  aria-label={`Project: ${project.title}. Role: ${project.role}. Press Enter or Space to view details.`}
+                  className="group relative flex flex-col h-full outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-blue-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950 rounded-xl cursor-default"
+                  aria-label={`Project: ${project.title}. Role: ${project.role}.`}
                 >
                   {/* Soft Adaptive Ambient Lighting Glow Effect */}
                   <AnimatePresence>
@@ -471,17 +469,6 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
                   <div className="relative aspect-video w-full p-4 bg-zinc-100 dark:bg-zinc-950/80 border-b border-zinc-200/50 dark:border-zinc-850/50 flex items-center justify-center overflow-hidden">
                     <div className="w-full h-full transform group-hover:scale-102 transition-transform duration-500">
                       <ProjectMockup type={project.image} />
-                    </div>
-
-                    {/* Quick-Inspect Hover Pill overlay */}
-                    <div className="absolute inset-0 bg-zinc-950/20 dark:bg-zinc-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-[1px]">
-                      <button
-                        onClick={() => setActiveProject(project)}
-                        className="px-4 py-2 rounded-lg bg-white/95 dark:bg-zinc-900/95 text-xs font-medium text-zinc-900 dark:text-zinc-55 flex items-center gap-1.5 cursor-pointer shadow-sm select-none"
-                      >
-                        <FolderOpen size={13} />
-                        Detail Specs
-                      </button>
                     </div>
                   </div>
 

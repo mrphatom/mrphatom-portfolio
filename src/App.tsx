@@ -249,7 +249,9 @@ export default function App() {
         return;
       }
       if (el.textContent && el.children.length === 0) { // Only target leaf nodes to safely preserve child tag structures
-        originalTexts.set(el, el.textContent);
+        const orig = el.textContent;
+        originalTexts.set(el, orig);
+        el.setAttribute('data-glitch-text', orig);
       }
     });
 
@@ -269,6 +271,7 @@ export default function App() {
           })
           .join('');
         el.textContent = scrambled;
+        el.setAttribute('data-glitch-text', scrambled);
       });
     }, 85);
 
@@ -280,6 +283,7 @@ export default function App() {
         if (original) {
           el.textContent = original;
         }
+        el.removeAttribute('data-glitch-text');
       });
     };
   }, [glitchActive]);
@@ -1648,6 +1652,15 @@ export default function App() {
             <div className="phantom-scanlines" />
             <div className="phantom-static-noise" />
             <div className="phantom-transmission-bar" />
+            
+            {/* Highly customized page-wide tearing full-line visual slice bands */}
+            <div className="phantom-glitch-strip-1" />
+            <div className="phantom-glitch-strip-2" />
+            <div className="phantom-glitch-strip-3" />
+            
+            {/* Extreme fullscreen overlay shifting to solid black, red, green, and blue error slices */}
+            <div className="phantom-crazy-blackout" />
+
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: [0, 0.45, 0.15, 0.35, 0], scale: 1 }}
