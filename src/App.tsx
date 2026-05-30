@@ -576,10 +576,7 @@ export default function App() {
   const [scrollProgress, setScrollProgress] = useState(0);
 
   // Pull to refresh states (strictly mobile touch only)
-  const [pullDistance, setPullDistance] = useState(0);
-  const [isPulling, setIsPulling] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [touchCoords, setTouchCoords] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [burstWave, setBurstWave] = useState<{ x: number; y: number; active: boolean } | null>(null);
 
   // Refs to allow the gesture system to run without tearing down event listeners on state updates
@@ -598,20 +595,21 @@ export default function App() {
       if (e.touches.length !== 1 || isRefreshingRef.current) return;
 
       const rightPanel = document.getElementById('right-scroll-panel');
-      const isAtTop = rightPanel 
-        ? (window.innerWidth >= 1024 ? rightPanel.scrollTop <= 0 : window.scrollY <= 0)
-        : window.scrollY <= 0;
+      const scrollTop = rightPanel 
+        ? (window.innerWidth >= 1024 ? rightPanel.scrollTop : window.scrollY || document.documentElement.scrollTop || document.body?.scrollTop || 0)
+        : (window.scrollY || document.documentElement.scrollTop || document.body?.scrollTop || 0);
 
-      if (!isAtTop) return;
+      // We only allow candidates if scrolled to top
+      if (scrollTop > 1) return;
 
       const touch = e.touches[0];
       startYRef.current = touch.clientY;
       startXRef.current = touch.clientX;
       isCandidateRef.current = true;
       currentPullingRef.current = false;
+      pullDistanceRef.current = 0;
       
       touchCoordsRef.current = { x: touch.clientX, y: touch.clientY };
-      setTouchCoords({ x: touch.clientX, y: touch.clientY });
     };
 
     const handleTouchMove = (e: TouchEvent) => {
@@ -622,9 +620,8 @@ export default function App() {
       const deltaX = touch.clientX - startXRef.current;
 
       // Identify downward pull gesture
-      if (!currentPullingRef.current && deltaY > 10 && deltaY > Math.abs(deltaX)) {
+      if (!currentPullingRef.current && deltaY > 8 && deltaY > Math.abs(deltaX)) {
         currentPullingRef.current = true;
-        setIsPulling(true);
       }
 
       if (currentPullingRef.current) {
@@ -632,12 +629,36 @@ export default function App() {
         if (e.cancelable) {
           e.preventDefault();
         }
-        const dampened = Math.min(130, Math.pow(Math.max(0, deltaY), 0.88));
+
+        // Beautiful logarithmic curve dampening
+        const dampened = Math.min(135, Math.pow(Math.max(0, deltaY), 0.88));
         pullDistanceRef.current = dampened;
-        setPullDistance(dampened);
-        
         touchCoordsRef.current = { x: touch.clientX, y: touch.clientY };
-        setTouchCoords({ x: touch.clientX, y: touch.clientY });
+
+        // GPU composite layer update directly bypassing virtual DOM re-renders!
+        const indicator = document.getElementById('custom-pull-indicator');
+        if (indicator) {
+          indicator.style.transition = 'none'; // clear slide/fade transitions during active drag
+          
+          const boundedX = Math.max(30, Math.min(window.innerWidth - 30, touch.clientX));
+          indicator.style.left = `${boundedX}px`;
+          
+          const rotationFraction = Math.min(1, dampened / 72);
+          const scale = Math.min(1.15, dampened / 55);
+          const opacity = Math.min(1, dampened / 24);
+          
+          // Beautiful fluid 3D tilting based on pull distance and horizontal drag offset!
+          const angleX = dampened * 0.35; // Tilt pitch based on pull distance
+          const angleY = Math.max(-25, Math.min(25, deltaX * 0.3)); // Yaw based on horizontal drag offset
+          
+          indicator.style.transform = `translate3d(-50%, ${dampened}px, 40px) rotateX(${angleX}deg) rotateY(${angleY}deg) scale(${scale})`;
+          indicator.style.opacity = `${opacity}`;
+
+          const icon = indicator.querySelector('.pull-icon') as HTMLElement;
+          if (icon) {
+            icon.style.transform = `rotate(${rotationFraction * 210}deg)`;
+          }
+        }
       }
     };
 
@@ -651,38 +672,49 @@ export default function App() {
       }
       isCandidateRef.current = false;
       currentPullingRef.current = false;
-      setIsPulling(false);
     };
 
     const triggerRefresh = async () => {
       isRefreshingRef.current = true;
       setIsRefreshing(true);
-      pullDistanceRef.current = 0;
-      setPullDistance(0); // clear pull distance on trigger so content releases beautifully
 
       try {
         triggerHaptic('medium');
         playNavTick();
       } catch {}
 
-      // Spread 3 staggered adaptive blue/grey waves from the top of the screen at the touch coordinate X
-      setBurstWave({ x: touchCoordsRef.current.x || window.innerWidth / 2, y: 0, active: true });
+      // Spread Waves from the very top center of the screen (beautiful cascading downward semicircles)
+      setBurstWave({ 
+        x: window.innerWidth / 2, 
+        y: 0, 
+        active: true 
+      });
+
+      // Slide and scale indicator out cleanly during action
+      const indicator = document.getElementById('custom-pull-indicator');
+      if (indicator) {
+        indicator.style.transition = 'transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.35s ease';
+        indicator.style.transform = `translate3d(-50%, 0, 0) scale(0)`;
+        indicator.style.opacity = '0';
+      }
 
       // Run live auto-sync fetches securely
       try {
         const response = await fetch('/api/portfolio');
         if (response.ok) {
           const remoteData = await response.json();
-          const merged = {
-            ...portfolioData,
-            ...remoteData,
-            profile: {
-              ...portfolioData.profile,
-              ...(remoteData.profile || {})
-            }
-          };
-          setEditableData(merged);
-          localStorage.setItem('portfolio_data', JSON.stringify(merged));
+          setEditableData(prev => {
+            const merged = {
+              ...prev,
+              ...remoteData,
+              profile: {
+                ...prev.profile,
+                ...(remoteData.profile || {})
+              }
+            };
+            localStorage.setItem('portfolio_data', JSON.stringify(merged));
+            return merged;
+          });
         }
       } catch (err) {
         console.warn('Pull-to-refresh sync info:', err);
@@ -692,23 +724,18 @@ export default function App() {
         isRefreshingRef.current = false;
         setIsRefreshing(false);
         setBurstWave(null);
-      }, 1800); // Ample time for the beautiful waves to complete
+      }, 1850);
     };
 
     const animateSnapBack = () => {
-      let currentVal = pullDistanceRef.current;
-      const step = Math.max(1, currentVal / 8);
-      const timer = setInterval(() => {
-        currentVal -= step;
-        if (currentVal <= 1) {
-          pullDistanceRef.current = 0;
-          setPullDistance(0);
-          clearInterval(timer);
-        } else {
-          pullDistanceRef.current = currentVal;
-          setPullDistance(currentVal);
-        }
-      }, 16);
+      const indicator = document.getElementById('custom-pull-indicator');
+      if (indicator) {
+        // High fidelity spring snap using native CSS cubic transitions
+        indicator.style.transition = 'transform 0.48s cubic-bezier(0.175, 0.885, 0.32, 1.35), opacity 0.35s ease';
+        indicator.style.transform = 'translate3d(-50%, 0, 0) scale(0)';
+        indicator.style.opacity = '0';
+      }
+      pullDistanceRef.current = 0;
     };
 
     window.addEventListener('touchstart', handleTouchStart, { passive: true });
@@ -1746,7 +1773,31 @@ export default function App() {
       />
 
       {/* Main Structural Layout Border Card Frame */}
-      <div className="flex flex-col lg:flex-row w-full h-auto lg:h-full border border-zinc-200/50 dark:border-zinc-850/80 md:rounded-2xl lg:overflow-hidden bg-white/75 dark:bg-[#0e0e0e]/75 backdrop-blur-md shadow-xs lg:max-h-full z-10">
+      <motion.div
+        id="main-layout-card"
+        className="flex flex-col lg:flex-row w-full h-auto lg:h-full border border-zinc-200/50 dark:border-zinc-850/80 md:rounded-2xl lg:overflow-hidden bg-white/75 dark:bg-[#0e0e0e]/75 backdrop-blur-md shadow-xs lg:max-h-full z-10"
+        style={{
+          transformStyle: 'preserve-3d',
+          transformPerspective: 1200,
+          filter: burstWave && burstWave.active ? 'url(#liquid-water-wave)' : 'none',
+        }}
+        animate={burstWave && burstWave.active ? {
+          // A single, extremely soft, slow-dissolving non-bouncy layout surge
+          translateY: [0, 3, 0],
+          scale: [1, 1.002, 1],
+          rotateX: [0, 0.3, 0],
+          z: [0, -2, 0]
+        } : {
+          translateY: 0,
+          rotateX: 0,
+          scale: 1,
+          z: 0
+        }}
+        transition={{
+          duration: 1.85,
+          ease: [0.25, 1, 0.5, 1]
+        }}
+      >
         
         {isNotFound ? (
           <NotFound 
@@ -2015,7 +2066,7 @@ export default function App() {
         </main>
         </>
         )}
-      </div>
+      </motion.div>
 
       {/* Modern circular reveal ripple animation overlay */}
       <AnimatePresence>
@@ -2049,44 +2100,83 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* Soft Blue Glassy Circle Following Touch Drag */}
-      <AnimatePresence>
-        {isPulling && pullDistance > 0 && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0 }}
-            animate={{ 
-              opacity: 1, 
-              scale: Math.min(1.2, pullDistance / 55),
-              x: touchCoords.x,
-              y: touchCoords.y,
-            }}
-            exit={{ opacity: 0, scale: 0 }}
-            style={{
-              position: 'fixed',
-              left: 0,
-              top: 0,
-              translateX: '-50%',
-              translateY: '-50%',
-              zIndex: 100000,
-            }}
-            className="w-14 h-14 rounded-full border border-sky-400/30 dark:border-sky-300/20 bg-sky-500/10 dark:bg-sky-400/15 backdrop-blur-md shadow-lg shadow-sky-500/5 dark:shadow-sky-400/5 flex items-center justify-center select-none pointer-events-none"
-          >
-            {/* Smoothly rotating indicator icon mirroring drag progress */}
-            <svg 
-              className="w-6 h-6 text-sky-500 dark:text-sky-450 transition-transform duration-75"
-              style={{
-                transform: `rotate(${Math.min(180, (pullDistance / 72) * 180)}deg)`
+      {/* Permanent, direct-DOM manipulated Pull-to-Refresh Indicator block for 120fps physics */}
+      <div
+        id="custom-pull-indicator"
+        className="fixed w-14 h-14 rounded-full border border-sky-400/35 dark:border-sky-300/25 bg-white/95 dark:bg-zinc-900/95 shadow-[0_4px_22px_rgba(56,189,248,0.18)] dark:shadow-[0_4px_28px_rgba(56,189,248,0.28)] flex items-center justify-center pointer-events-none select-none"
+        style={{
+          position: 'fixed',
+          top: '-80px', // initially safely off-screen
+          left: '50%',
+          transform: 'translate3d(-50%, 0, 0) scale(0)',
+          zIndex: 100000,
+          opacity: 0,
+          willChange: 'transform, opacity, left',
+          perspective: '1000px',
+          transformStyle: 'preserve-3d',
+        }}
+      >
+        <svg 
+          className="pull-icon w-6 h-6 text-sky-500 dark:text-sky-400"
+          fill="none" 
+          viewBox="0 0 24 24" 
+          stroke="currentColor" 
+          strokeWidth={2.5}
+          style={{ transition: 'transform 75ms linear', willChange: 'transform' }}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+        </svg>
+      </div>
+
+      {/* 3D Liquid Water Ripple Displacement Filter for Organic Page Distortion */}
+      <svg className="absolute w-0 h-0 pointer-events-none" style={{ visibility: 'hidden', position: 'absolute' }}>
+        <defs>
+          <filter id="liquid-water-wave" x="-10%" y="-10%" width="120%" height="120%">
+            {/* Cascading Semicircle Wave Propagation dynamic turbulence pattern */}
+            <motion.feTurbulence
+              type="fractalNoise"
+              numOctaves="3"
+              result="noise"
+              animate={burstWave && burstWave.active ? {
+                baseFrequency: [
+                  "0.002 0.004",   // Soft rolling start at the top
+                  "0.005 0.008",   // Propagating downward, expanding wavelengths
+                  "0.008 0.012",   // Center of wave cascading with rich organic detail
+                  "0.004 0.006",   // Gently widening and calming wave crests
+                  "0.001 0.002",   // Soft residual ripples dissolving
+                  "0.000 0.000"    // Calm, glass-like absolute quietude
+                ],
+                seed: [2, 6, 12, 18, 24, 30]
+              } : {
+                baseFrequency: "0.0 0.0",
+                seed: 2
               }}
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor" 
-              strokeWidth={2.5}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-            </svg>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              transition={{
+                duration: 1.85,
+                times: [0, 0.18, 0.42, 0.68, 0.88, 1],
+                ease: "easeInOut"
+              }}
+            />
+            <motion.feDisplacementMap
+              in="SourceGraphic"
+              in2="noise"
+              xChannelSelector="R"
+              yChannelSelector="G"
+              result="displacement"
+              animate={burstWave && burstWave.active ? {
+                scale: [0, 22, 35, 20, 6, 0], // Smooth rise, peak cascade, and gentle transition back to silent glass
+              } : {
+                scale: 0
+              }}
+              transition={{
+                duration: 1.85,
+                times: [0, 0.15, 0.38, 0.65, 0.85, 1],
+                ease: [0.16, 1, 0.3, 1]
+              }}
+            />
+          </filter>
+        </defs>
+      </svg>
 
       {/* Minimal Glassy Spinner during Workspace Sync */}
       <AnimatePresence>
@@ -2104,102 +2194,6 @@ export default function App() {
           >
             <div className="w-4 h-4 border-2 border-sky-500 border-t-transparent dark:border-sky-400 dark:border-t-transparent rounded-full animate-spin" />
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Modern Circular Reveal Soft Blue-Grey Wave Ripple Effect */}
-      <AnimatePresence>
-        {burstWave && burstWave.active && (
-          <div className="fixed inset-0 z-[100001] pointer-events-none overflow-hidden select-none">
-            {/* Staggered Ripple Wave 1 (Instant burst) */}
-            <motion.div
-              style={{
-                position: 'absolute',
-                left: burstWave.x,
-                top: 0,
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                x: '-50%',
-                y: '-50%',
-                transformOrigin: 'center',
-                filter: 'blur(35px)',
-                background: darkMode
-                  ? 'radial-gradient(circle, rgba(56, 189, 248, 0.45) 0%, rgba(148, 163, 184, 0.18) 45%, rgba(0, 0, 0, 0) 70%)'
-                  : 'radial-gradient(circle, rgba(14, 165, 233, 0.32) 0%, rgba(148, 163, 184, 0.14) 45%, rgba(0, 0, 0, 0) 70%)',
-              }}
-              initial={{ scale: 0, opacity: 0.95 }}
-              animate={{ 
-                scale: Math.max(window.innerWidth, window.innerHeight) * 0.22,
-                opacity: [0.95, 0.6, 0]
-              }}
-              exit={{ opacity: 0 }}
-              transition={{
-                duration: 1.3,
-                ease: [0.1, 0.8, 0.2, 1]
-              }}
-            />
-
-            {/* Staggered Ripple Wave 2 (Middle staggered delayed layer) */}
-            <motion.div
-              style={{
-                position: 'absolute',
-                left: burstWave.x,
-                top: 0,
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                x: '-50%',
-                y: '-50%',
-                transformOrigin: 'center',
-                filter: 'blur(45px)',
-                background: darkMode
-                  ? 'radial-gradient(circle, rgba(56, 189, 248, 0.3) 0%, rgba(148, 163, 184, 0.12) 50%, rgba(0, 0, 0, 0) 75%)'
-                  : 'radial-gradient(circle, rgba(14, 165, 233, 0.22) 0%, rgba(148, 163, 184, 0.08) 50%, rgba(0, 0, 0, 0) 75%)',
-              }}
-              initial={{ scale: 0, opacity: 0.85 }}
-              animate={{ 
-                scale: Math.max(window.innerWidth, window.innerHeight) * 0.28,
-                opacity: [0.85, 0.4, 0]
-              }}
-              exit={{ opacity: 0 }}
-              transition={{
-                duration: 1.45,
-                ease: [0.12, 0.82, 0.22, 1],
-                delay: 0.16
-              }}
-            />
-
-            {/* Staggered Ripple Wave 3 (Deep long delayed layer) */}
-            <motion.div
-              style={{
-                position: 'absolute',
-                left: burstWave.x,
-                top: 0,
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                x: '-50%',
-                y: '-50%',
-                transformOrigin: 'center',
-                filter: 'blur(55px)',
-                background: darkMode
-                  ? 'radial-gradient(circle, rgba(56, 189, 248, 0.18) 0%, rgba(148, 163, 184, 0.06) 55%, rgba(0, 0, 0, 0) 80%)'
-                  : 'radial-gradient(circle, rgba(14, 165, 233, 0.12) 0%, rgba(148, 163, 184, 0.04) 55%, rgba(0, 0, 0, 0) 80%)',
-              }}
-              initial={{ scale: 0, opacity: 0.75 }}
-              animate={{ 
-                scale: Math.max(window.innerWidth, window.innerHeight) * 0.35,
-                opacity: [0.75, 0.2, 0]
-              }}
-              exit={{ opacity: 0 }}
-              transition={{
-                duration: 1.6,
-                ease: [0.15, 0.85, 0.25, 1],
-                delay: 0.32
-              }}
-            />
-          </div>
         )}
       </AnimatePresence>
 

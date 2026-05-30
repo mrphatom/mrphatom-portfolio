@@ -23,6 +23,40 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
     setIsExpanded(false);
   }, [selectedTag, searchQuery]);
 
+  // Handle tech skills clicking events dynamically with fallback search integration
+  useEffect(() => {
+    const handleFilterEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ skill: string }>;
+      const skillName = customEvent.detail?.skill;
+      if (!skillName) return;
+
+      // Extract unique tags from projects
+      const featured = projects.filter(p => p.featured === true || p.featured === undefined);
+      const tags = Array.from(new Set(featured.flatMap(p => p.tags)));
+
+      // Find standard match
+      const matchedTag = tags.find(tag => 
+        tag.toLowerCase() === skillName.toLowerCase() ||
+        skillName.toLowerCase().includes(tag.toLowerCase()) ||
+        tag.toLowerCase().includes(skillName.toLowerCase())
+      );
+
+      if (matchedTag) {
+        setSelectedTag(matchedTag);
+        setSearchQuery('');
+      } else {
+        // Search filter fallback
+        setSelectedTag('All');
+        setSearchQuery(skillName);
+      }
+    };
+
+    window.addEventListener('filter-projects-by-skill', handleFilterEvent);
+    return () => {
+      window.removeEventListener('filter-projects-by-skill', handleFilterEvent);
+    };
+  }, [projects]);
+
   // Swipe gesture touch references
   const touchStartY = useRef<number | null>(null);
   const touchStartX = useRef<number | null>(null);
@@ -386,17 +420,21 @@ export default function Projects({ projects, isLoading }: ProjectsProps) {
             id="project-grid-container"
             layout
             className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8"
+            style={{ perspective: 1200, transformStyle: 'preserve-3d' }}
           >
             <AnimatePresence mode="popLayout">
             {displayedProjects.map((project, index) => (
               <motion.div
                 key={project.id}
                 layout
-                initial={{ opacity: 0, scale: 0.96, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
+                initial={{ opacity: 0, scale: 0.94, rotateX: -6, rotateY: 5, y: 35 }}
+                whileInView={{ opacity: 1, scale: [0.94, 1.025, 1], rotateX: [-6, 2.5, 0], rotateY: [5, -1, 0], y: 0 }}
+                viewport={{ once: true, margin: "-50px" }}
                 exit={{ opacity: 0, scale: 0.94, y: 15 }}
                 transition={{ 
-                  opacity: { duration: 0.22 },
+                  duration: 0.85,
+                  ease: [0.16, 1, 0.3, 1],
+                  delay: index * 0.08,
                   layout: { type: 'spring', stiffness: 360, damping: 32 }
                 }}
                 className="h-full"

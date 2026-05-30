@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Flame, FileCode, Layers, Palette, Sparkles, Cpu, Layout, PenTool, Box, Activity, Terminal, Network, GitBranch, BarChart2 } from 'lucide-react';
 import { SkillItem } from '../types';
 import ScrambleText from './ScrambleText';
+import { playSoftClick } from '../utils/audio';
 
 interface SkillsProps {
   skills: SkillItem[];
@@ -11,6 +12,20 @@ interface SkillsProps {
 export default function Skills({ skills }: SkillsProps) {
   const [hoveredSkill, setHoveredSkill] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('All');
+
+  const handleSkillClick = (skillName: string) => {
+    // Play a lovely tactile click sound
+    playSoftClick();
+
+    // Dispatch a custom event to update projects filter
+    window.dispatchEvent(new CustomEvent('filter-projects-by-skill', { detail: { skill: skillName } }));
+    
+    // Scroll smoothly to Projects section
+    const element = document.getElementById('work');
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   // Categories extraction
   const categories = ['All', 'Frontend', 'Design', 'Utilities'];
@@ -128,7 +143,8 @@ export default function Skills({ skills }: SkillsProps) {
             <motion.div
               key={skill.name}
               variants={itemVariants}
-              className="group bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-4 rounded-xl flex items-center justify-between shadow-xs hover:shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-all cursor-pointer"
+              onClick={() => handleSkillClick(skill.name)}
+              className="group bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 p-4 rounded-xl flex items-center justify-between shadow-xs hover:shadow-sm hover:border-zinc-300 dark:hover:border-zinc-700 transition-all cursor-pointer active:scale-[0.985]"
               onMouseEnter={() => setHoveredSkill(skill.name)}
               onMouseLeave={() => setHoveredSkill(null)}
             >
@@ -148,25 +164,49 @@ export default function Skills({ skills }: SkillsProps) {
                 </div>
               </div>
 
-              {/* Graphical level meter widget */}
-              <div className="flex items-center gap-3 w-1/3">
-                <div className="relative h-1.5 w-full bg-zinc-100 dark:bg-zinc-800/80 rounded-full overflow-hidden">
-                  <motion.div
-                    className="absolute top-0 left-0 bottom-0 bg-zinc-900 dark:bg-zinc-50 rounded-full"
-                    initial={{ width: "0%" }}
-                    whileInView={{ width: `${skill.level}%` }}
-                    viewport={{ once: true, margin: "-20px" }}
-                    transition={{ 
-                      type: 'spring',
-                      stiffness: 70, 
-                      damping: 15,
-                      delay: 0.1
-                    }}
-                  />
-                </div>
-                <span className="text-[10px] font-mono text-zinc-500 font-medium text-right min-w-[28px] select-none">
-                  {skill.level}%
-                </span>
+              {/* Graphical level meter widget or Hover click indicator */}
+              <div className="flex items-center gap-3 w-1/3 min-w-[70px] justify-end">
+                <AnimatePresence mode="wait">
+                  {hoveredSkill === skill.name ? (
+                    <motion.span
+                      key="filter-badge"
+                      initial={{ opacity: 0, x: 5 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -5 }}
+                      transition={{ duration: 0.15 }}
+                      className="text-[9px] font-mono uppercase bg-blue-500/10 text-blue-600 dark:bg-blue-400/10 dark:text-blue-300 px-1.5 py-0.5 rounded border border-blue-500/20 dark:border-blue-400/20 max-w-full truncate select-none text-right font-semibold"
+                    >
+                      Filter &rarr;
+                    </motion.span>
+                  ) : (
+                    <motion.div
+                      key="level-gauge"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="flex items-center gap-2.5 w-full"
+                    >
+                      <div className="relative h-1.5 w-full bg-zinc-100 dark:bg-zinc-800/80 rounded-full overflow-hidden">
+                        <motion.div
+                          className="absolute top-0 left-0 bottom-0 bg-zinc-900 dark:bg-zinc-50 rounded-full"
+                          initial={{ width: "0%" }}
+                          whileInView={{ width: `${skill.level}%` }}
+                          viewport={{ once: true, margin: "-20px" }}
+                          transition={{ 
+                            type: 'spring',
+                            stiffness: 70, 
+                            damping: 15,
+                            delay: 0.1
+                          }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-500 font-medium text-right min-w-[28px] select-none">
+                        {skill.level}%
+                      </span>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </motion.div>
           ))}
