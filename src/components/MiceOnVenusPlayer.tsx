@@ -18,6 +18,12 @@ const PLAYLIST = [
     url: "/api/music/sweden.mp3"
   },
   {
+    title: "Aria Math",
+    artist: "C418",
+    album: "Volume Beta",
+    url: "/api/music/aria-math.mp3"
+  },
+  {
     title: "Sunroof",
     artist: "Nicky Youre Ft. Dazy",
     album: "Sunroof - Single",
@@ -265,7 +271,7 @@ export default function MiceOnVenusPlayer() {
     };
 
     const handleEnded = () => {
-      // Flow freely from Mice -> Sleeping City -> Sunroof -> Repeat (all over again)
+      // Flow freely from Mice -> Sweden -> Aria Math -> Sunroof -> Repeat (all over again)
       setCurrentTrackIndex((prev) => (prev + 1) % PLAYLIST.length);
       setIsPlaying(true);
     };

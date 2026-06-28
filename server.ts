@@ -194,7 +194,7 @@ async function startServer() {
 
   // Proxy & Cache track loader with self-healing failsafe streams to prevent any playback disruption
   app.get("/api/music/:trackKey.mp3", async (req, res) => {
-    const TRACK_SOURCES: Record<string, { filename: string; primary: string; fallback: string }> = {
+    const TRACK_SOURCES: Record<string, { filename: string; primary: string | string[]; fallback?: string }> = {
       "mice-on-venus": {
         filename: "mice_on_venus.mp3",
         primary: "https://archive.org/download/mice-on-venus-vinyl/Mice%20on%20Venus.mp3",
@@ -204,6 +204,10 @@ async function startServer() {
         filename: "sweden.mp3",
         primary: "https://archive.org/download/c418swedenminecraftvolumealpha_201908/c418-sweden-minecraft-volume-alpha.mp3",
         fallback: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
+      },
+      "aria-math": {
+        filename: "aria_math.mp3",
+        primary: "https://dn721907.ca.archive.org/0/items/minecraft-2011-ost/Minecraft%20-%2037.%20Aria%20Math.mp3"
       },
       "sunroof": {
         filename: "sunroof.mp3",
@@ -293,17 +297,36 @@ async function startServer() {
           }
         }
       } else {
-        // General Direct download (e.g. Mice on Venus or Sunroof)
-        const response = await fetch(sourceInfo.primary, {
-          headers: { "User-Agent": userAgent }
-        });
-        const contentType = response.headers.get("content-type") || "";
-        
-        if (response.ok && !contentType.includes("text/html")) {
-          const arrayBuffer = await response.arrayBuffer();
-          responseBuffer = Buffer.from(arrayBuffer);
-        } else {
-          throw new Error(`Direct download returned status code ${response.status} or invalid mimetype (${contentType})`);
+        // General Direct download (e.g. Mice on Venus, Sweden, Aria Math or Sunroof)
+        const primaryUrls = Array.isArray(sourceInfo.primary) ? sourceInfo.primary : [sourceInfo.primary];
+        let downloadSuccess = false;
+        let lastError = null;
+
+        for (const url of primaryUrls) {
+          try {
+            console.log(`Attempting primary download from: ${url}`);
+            const response = await fetch(url, {
+              headers: { "User-Agent": userAgent }
+            });
+            const contentType = response.headers.get("content-type") || "";
+            
+            if (response.ok && !contentType.includes("text/html")) {
+              const arrayBuffer = await response.arrayBuffer();
+              responseBuffer = Buffer.from(arrayBuffer);
+              downloadSuccess = true;
+              console.log(`Successfully downloaded and buffered track from primary URL: ${url}`);
+              break;
+            } else {
+              throw new Error(`Returned status code ${response.status} or invalid mimetype (${contentType})`);
+            }
+          } catch (err: any) {
+            console.warn(`Primary download option failed for ${url}:`, err?.message || err);
+            lastError = err;
+          }
+        }
+
+        if (!downloadSuccess) {
+          throw new Error(lastError?.message || `Direct download returned status code 503 or invalid mimetype (text/html; charset=UTF-8)`);
         }
       }
     } catch (primaryErr: any) {
@@ -312,21 +335,26 @@ async function startServer() {
 
     // Self-healing / Failsafe path: if primary buffer is empty or failed, fetch from high-availability fallback
     if (!responseBuffer || responseBuffer.length === 0) {
-      try {
-        console.log(`Triggering instant fallback for ${trackKey}: downloading from ${sourceInfo.fallback}`);
-        const fallbackResponse = await fetch(sourceInfo.fallback, {
-          headers: { "User-Agent": userAgent }
-        });
-        if (fallbackResponse.ok) {
-          const arrayBuffer = await fallbackResponse.arrayBuffer();
-          responseBuffer = Buffer.from(arrayBuffer);
-          console.log(`Fallback for ${trackKey} completed and buffered successfully!`);
-        } else {
-          throw new Error(`Fallback target returned status code ${fallbackResponse.status}`);
+      if (sourceInfo.fallback) {
+        try {
+          console.log(`Triggering instant fallback for ${trackKey}: downloading from ${sourceInfo.fallback}`);
+          const fallbackResponse = await fetch(sourceInfo.fallback, {
+            headers: { "User-Agent": userAgent }
+          });
+          if (fallbackResponse.ok) {
+            const arrayBuffer = await fallbackResponse.arrayBuffer();
+            responseBuffer = Buffer.from(arrayBuffer);
+            console.log(`Fallback for ${trackKey} completed and buffered successfully!`);
+          } else {
+            throw new Error(`Fallback target returned status code ${fallbackResponse.status}`);
+          }
+        } catch (fallbackErr: any) {
+          console.error(`Double disruption: Fallback for ${trackKey} also failed:`, fallbackErr);
+          return res.status(500).json({ error: "Failed to load audio resource even on fallback" });
         }
-      } catch (fallbackErr: any) {
-        console.error(`Double disruption: Fallback for ${trackKey} also failed:`, fallbackErr);
-        return res.status(500).json({ error: "Failed to load audio resource even on fallback" });
+      } else {
+        console.error(`CRITICAL: Primary download failed and no fallback specified for ${trackKey}.`);
+        return res.status(503).json({ error: "Failed to download track and no fallback is configured." });
       }
     }
 
